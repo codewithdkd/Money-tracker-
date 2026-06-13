@@ -1,0 +1,6 @@
+{
+  "name": "Expense Tracker",
+  "description": "An offline-first, Material Design 3 personal expense tracking application with dashboard analytics, PDF/Excel export, and database-level local/cloud backup integration.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
