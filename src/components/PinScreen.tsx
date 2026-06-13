@@ -100,7 +100,7 @@ export default function PinScreen({ settings, onUnlock, onSetPin }: PinScreenPro
   };
 
   const handleFinishSetup = () => {
-    onSetPin(tempPin, customHint || 'No hint configured', customName || 'Hope');
+    onSetPin(tempPin, customHint || 'No hint configured', customName || 'User');
     setIsSetupMode(false);
     setPinInput('');
     setSetupStep(1);
@@ -132,7 +132,7 @@ export default function PinScreen({ settings, onUnlock, onSetPin }: PinScreenPro
         </motion.div>
 
         <h1 className="text-xl font-bold text-slate-800 dark:text-slate-100 tracking-tight">
-          {isSetupMode ? 'Create New Profile PIN' : `Welcome ${settings.userName || 'Hope'}`}
+          {isSetupMode ? 'Create New Profile PIN' : `Welcome ${settings.userName || 'User'}`}
         </h1>
         <p className="text-xs text-slate-500 dark:text-slate-400 mt-2 max-w-xs">
           {isSetupMode

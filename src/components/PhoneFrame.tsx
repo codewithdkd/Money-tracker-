@@ -378,9 +378,9 @@ export default function PhoneFrame({
               title="Open Settings Details"
             >
               <div className="h-3.5 w-3.5 rounded-full bg-indigo-600 text-[8px] text-white font-black flex items-center justify-center">
-                {(settings.userName || 'Hope').charAt(0).toUpperCase()}
+                {(settings.userName || 'User').charAt(0).toUpperCase()}
               </div>
-              <span className="truncate max-w-[65px]">{settings.userName || 'Hope'}</span>
+              <span className="truncate max-w-[65px]">{settings.userName || 'User'}</span>
             </button>
           </div>
 
@@ -398,7 +398,7 @@ export default function PhoneFrame({
                 <div className="flex-1 overflow-hidden flex flex-col relative bg-slate-50 dark:bg-slate-900">
                   {/* Onboarding Name Setup Overlay */}
                   <AnimatePresence>
-                    {(settings.userName === 'Hope' || !settings.userName) && (
+                    {(settings.userName === 'User' || !settings.userName) && (
                       <motion.div
                         initial={{ opacity: 0 }}
                         animate={{ opacity: 1 }}
