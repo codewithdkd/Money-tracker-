@@ -1303,6 +1303,35 @@ export default function SettingsScreen({
                 );
               })}
             </div>
+            
+            {/* Explanatory & Interactive testing subcase */}
+            <div className="mt-3 p-3 bg-slate-50 dark:bg-slate-900 rounded-lg border border-slate-100 dark:border-slate-800 text-left space-y-2">
+              <div className="flex items-center justify-between">
+                <span className="text-[10px] font-bold text-slate-500 dark:text-slate-400 uppercase flex items-center gap-1.5">
+                  <span className={`h-2.5 w-2.5 rounded-full ${settings.reminderFrequency !== 'Disabled' ? 'bg-emerald-500 animate-pulse' : 'bg-slate-300'}`} />
+                  Android Status: {settings.reminderFrequency !== 'Disabled' ? 'Alarm Registered' : 'Inactive'}
+                </span>
+                {settings.reminderFrequency !== 'Disabled' && (
+                  <button
+                    onClick={() => onTriggerNotification('⏰ Don\'t forget to record your expenses!', 'Keep your personal budget on track!')}
+                    className="text-[9px] font-bold text-indigo-600 hover:text-indigo-500 hover:underline cursor-pointer"
+                  >
+                    Test Alarm Now &rarr;
+                  </button>
+                )}
+              </div>
+              <p className="text-[10.5px] text-slate-500 dark:text-slate-400 leading-normal">
+                {settings.reminderFrequency !== 'Disabled' ? (
+                  <>
+                    <strong>Real-Time Android Execution:</strong> Once installed on your device, the chosen interval (e.g., every {settings.reminderFrequency.replace('Every ', '')}) is registered directly in the Android OS System Alarm Service via <code className="bg-slate-200 dark:bg-slate-800 px-1 py-0.5 rounded font-mono text-[9.5px]">android_alarm_manager_plus</code>. The system wakes up a background worker at exactly that hourly frequency, even when your screen is locked or the app is closed, to deliver a dynamic push warning reminding you to log your transactions.
+                  </>
+                ) : (
+                  <>
+                    <strong>Real-Time Android Execution:</strong> Select an interval to register a low-battery background alarm with the Android OS that schedules push alerts in real-time.
+                  </>
+                )}
+              </p>
+            </div>
           </div>
         </div>
       </div>

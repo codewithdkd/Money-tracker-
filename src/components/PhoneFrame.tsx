@@ -86,6 +86,23 @@ export default function PhoneFrame({
   const [unreadNotificationsCount, setUnreadNotificationsCount] = useState<number>(0);
   const [showNotificationsDropdown, setShowNotificationsDropdown] = useState<boolean>(false);
   const [incomingAlert, setIncomingAlert] = useState<{ title: string; message: string } | null>(null);
+  const [currentTime, setCurrentTime] = useState<string>('');
+  const [currentDateString, setCurrentDateString] = useState<string>('');
+
+  useEffect(() => {
+    const updateTime = () => {
+      const now = new Date();
+      const hours = now.getHours().toString().padStart(2, '0');
+      const minutes = now.getMinutes().toString().padStart(2, '0');
+      setCurrentTime(`${hours}:${minutes}`);
+      
+      const options: Intl.DateTimeFormatOptions = { weekday: 'short', month: 'short', day: 'numeric' };
+      setCurrentDateString(now.toLocaleDateString('en-US', options));
+    };
+    updateTime();
+    const timer = setInterval(updateTime, 1000);
+    return () => clearInterval(timer);
+  }, []);
 
   useEffect(() => {
     // Read notifications
@@ -102,43 +119,6 @@ export default function PhoneFrame({
       }
     }
   }, []);
-
-  // Periodic Reminder background simulator
-  // Maps real-world frequencies to fast interactive test cycles:
-  // - "Every 1 Hour" triggers a system notification reminder every 60 seconds (1 minute).
-  // - "Every 2 Hours" triggers every 120 seconds (2 minutes).
-  // - "Every 4 Hours" triggers every 240 seconds (4 minutes).
-  // - "Disabled" does not schedule any.
-  useEffect(() => {
-    const freq = settings.reminderFrequency || 'Every 2 Hours';
-    if (freq === 'Disabled') return;
-
-    let secondsInterval = 120; // default for Every 2 Hours (120s)
-    if (freq === 'Every 1 Hour') secondsInterval = 60;
-    if (freq === 'Every 4 Hours') secondsInterval = 240;
-
-    console.log(`[Notification Engine] Standalone Alarm Scheduler active: ${freq}. Cycle frequency mapped to ${secondsInterval}s for testing.`);
-
-    const intervalId = setInterval(() => {
-      const title = '⏰ Time to record your expenses!';
-      const message = `This is your scheduled backup reminder (${freq} interval). Open Material 3 Expense Tracker to record any cash, UPI or card transactions!`;
-      
-      const logs = DbSim.getNotificationLogs();
-      const newLog: NotificationLog = {
-        id: `reminder_${Date.now()}`,
-        timestamp: new Date().toISOString().replace('T', ' ').substring(0, 19),
-        title,
-        message,
-        read: false
-      };
-      DbSim.saveNotificationLogs([newLog, ...logs]);
-
-      // Trigger the standard system alert banner and native push notification
-      handleTriggerNotification(title, message);
-    }, secondsInterval * 1000);
-
-    return () => clearInterval(intervalId);
-  }, [settings.reminderFrequency]);
 
   // System alert notification triggerer
   const handleTriggerNotification = (title: string, message: string) => {
@@ -383,30 +363,14 @@ export default function PhoneFrame({
         <div className={`flex-1 flex flex-col overflow-hidden rounded-[28px] border border-slate-900 ${settings.darkMode ? 'dark bg-slate-900' : 'bg-slate-50'} transition-colors duration-300 relative`}>
           
           {/* Top Status Indicators bar */}
-          <div className="h-11 px-6 bg-slate-50 dark:bg-slate-900 flex items-center justify-between z-40 text-slate-500 dark:text-slate-400 select-none">
+          <div className="h-11 px-6 bg-slate-100 dark:bg-slate-900 flex items-center justify-between z-40 text-slate-500 dark:text-slate-400 select-none border-b border-slate-100 dark:border-slate-850">
             <div className="flex items-center gap-1 font-mono text-xs font-black">
               <Clock className="h-3 w-3" />
-              <span>07:21</span>
+              <span>{currentTime}</span>
             </div>
             
-            <div className="flex items-center gap-2">
-              {/* Notifications Inbox overlay button inside status bar */}
-              <button
-                onClick={() => {
-                  setShowNotificationsDropdown(!showNotificationsDropdown);
-                  if (!showNotificationsDropdown) {
-                    handleMarkNotificationsRead();
-                  }
-                }}
-                className="relative p-1 hover:bg-slate-200 dark:hover:bg-slate-805 rounded-full cursor-pointer text-slate-500 dark:text-slate-400"
-              >
-                <Bell className="h-3.5 w-3.5" />
-                {unreadNotificationsCount > 0 && (
-                  <span className="absolute -top-0.5 -right-0.5 h-2 w-2 rounded-full bg-red-500 animate-ping" />
-                )}
-              </button>
-              <Wifi className="h-3.5 w-3.5" />
-              <Battery className="h-3.5 w-3.5 text-emerald-500" />
+            <div className="flex items-center gap-1 font-mono text-xs font-black">
+              <span>{currentDateString}</span>
             </div>
           </div>
 
