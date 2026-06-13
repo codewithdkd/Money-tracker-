@@ -20,6 +20,7 @@ import {
   FileText,
   Flame,
   User,
+  Calendar,
   Activity,
   Menu,
   ChevronDown
@@ -71,11 +72,13 @@ export default function PhoneFrame({
     setIsLocked(false);
   };
 
-  const handleUpdatePin = (newPin: string) => {
-    const updated = {
+  const handleUpdatePin = (newPin: string, hint?: string, userName?: string) => {
+    const updated: AppSettings = {
       ...settings,
       pin: newPin,
-      isPinSet: true
+      isPinSet: true,
+      ...(hint !== undefined ? { pinHint: hint } : {}),
+      ...(userName !== undefined ? { userName } : {})
     };
     DbSim.saveSettings(updated);
     setSettings(updated);
@@ -141,8 +144,8 @@ export default function PhoneFrame({
     if ('Notification' in window && Notification.permission === 'granted') {
       const options = {
         body: message,
-        icon: 'https://cdn-icons-png.flaticon.com/512/10149/10149363.png',
-        badge: 'https://cdn-icons-png.flaticon.com/512/10149/10149363.png',
+        icon: '/icon.svg',
+        badge: '/icon.svg',
         vibrate: [200, 100, 200],
         tag: 'expense-tracker-alert'
       };
@@ -167,7 +170,7 @@ export default function PhoneFrame({
     // Auto dismiss banners
     setTimeout(() => {
       setIncomingAlert(null);
-    }, 6000);
+    }, 2500);
   };
 
   const handleMarkNotificationsRead = () => {
@@ -364,14 +367,21 @@ export default function PhoneFrame({
           
           {/* Top Status Indicators bar */}
           <div className="h-11 px-6 bg-slate-100 dark:bg-slate-900 flex items-center justify-between z-40 text-slate-500 dark:text-slate-400 select-none border-b border-slate-100 dark:border-slate-850">
-            <div className="flex items-center gap-1 font-mono text-xs font-black">
-              <Clock className="h-3 w-3" />
-              <span>{currentTime}</span>
+            <div className="flex items-center gap-1 text-[11px] font-black font-mono">
+              <Calendar className="h-3 w-3 text-indigo-500" />
+              <span>{`${new Date().getDate()} - ${new Date().toLocaleDateString('en-US', { month: 'short' }).toUpperCase()}`}</span>
             </div>
             
-            <div className="flex items-center gap-1 font-mono text-xs font-black">
-              <span>{currentDateString}</span>
-            </div>
+            <button 
+              onClick={() => setActiveTab('settings')}
+              className="flex items-center gap-1.5 bg-indigo-50 dark:bg-slate-800 hover:bg-indigo-100 dark:hover:bg-slate-700 px-2.5 py-0.5 rounded-full text-[10px] font-bold text-indigo-600 dark:text-indigo-400 border border-indigo-150/40 dark:border-slate-700 cursor-pointer transition-all"
+              title="Open Settings Details"
+            >
+              <div className="h-3.5 w-3.5 rounded-full bg-indigo-600 text-[8px] text-white font-black flex items-center justify-center">
+                {(settings.userName || 'Hope').charAt(0).toUpperCase()}
+              </div>
+              <span className="truncate max-w-[65px]">{settings.userName || 'Hope'}</span>
+            </button>
           </div>
 
           {/* Core Content viewer Routing page */}
@@ -386,6 +396,68 @@ export default function PhoneFrame({
               <>
                 {/* Sub routing blocks */}
                 <div className="flex-1 overflow-hidden flex flex-col relative bg-slate-50 dark:bg-slate-900">
+                  {/* Onboarding Name Setup Overlay */}
+                  <AnimatePresence>
+                    {(settings.userName === 'Hope' || !settings.userName) && (
+                      <motion.div
+                        initial={{ opacity: 0 }}
+                        animate={{ opacity: 1 }}
+                        exit={{ opacity: 0 }}
+                        className="absolute inset-0 bg-slate-950/80 backdrop-blur-md z-50 flex flex-col items-center justify-center p-6"
+                      >
+                        <motion.div
+                          initial={{ scale: 0.9, y: 20 }}
+                          animate={{ scale: 1, y: 0 }}
+                          exit={{ scale: 0.9, y: 20 }}
+                          className="bg-white dark:bg-slate-800 p-6 rounded-3xl border border-slate-100 dark:border-slate-700 shadow-2xl max-w-xs w-full text-center space-y-4 font-sans"
+                        >
+                          <div className="mx-auto h-12 w-12 rounded-full bg-indigo-50 dark:bg-indigo-950/40 border border-indigo-200 dark:border-indigo-800 text-indigo-600 dark:text-indigo-400 flex items-center justify-center">
+                            <User className="h-6 w-6 animate-pulse" />
+                          </div>
+                          
+                          <div className="space-y-1">
+                            <h3 className="text-sm font-black text-slate-800 dark:text-slate-100 uppercase tracking-wider font-mono">Personalize App</h3>
+                            <p className="text-[10px] text-slate-400 leading-normal">
+                              Enter your profile name to customize greeting logs, generate statement reports, and track personal expenses.
+                            </p>
+                          </div>
+
+                          <div className="space-y-2 pt-1">
+                            <input 
+                              type="text"
+                              placeholder="e.g. Deepak"
+                              className="w-full bg-slate-50 dark:bg-slate-900 p-3 rounded-2xl border border-slate-200 dark:border-slate-750 text-xs font-bold font-sans text-center text-slate-800 dark:text-slate-100 outline-none focus:ring-2 focus:ring-indigo-500 transition-all"
+                              id="userNameOnboarding"
+                              autoFocus
+                              onKeyDown={(e) => {
+                                if (e.key === 'Enter') {
+                                  const val = (e.target as HTMLInputElement).value.trim();
+                                  if (val) {
+                                    handleUpdatePin(settings.pin, settings.pinHint, val);
+                                    handleTriggerNotification('🎉 Welcome aboard!', `Hey ${val}, your personal Expense Tracker is ready!`);
+                                  }
+                                }
+                              }}
+                            />
+                            
+                            <button
+                              onClick={() => {
+                                const input = document.getElementById('userNameOnboarding') as HTMLInputElement;
+                                const val = input ? input.value.trim() : '';
+                                if (val) {
+                                  handleUpdatePin(settings.pin, settings.pinHint, val);
+                                  handleTriggerNotification('🎉 Welcome aboard!', `Hey ${val}, your personal Expense Tracker is ready!`);
+                                }
+                              }}
+                              className="w-full py-2.5 bg-indigo-600 hover:bg-indigo-700 active:scale-95 text-white font-black text-xs rounded-2xl cursor-pointer transition-all border border-indigo-500/20 shadow-md font-mono uppercase tracking-widest"
+                            >
+                              Get Started
+                            </button>
+                          </div>
+                        </motion.div>
+                      </motion.div>
+                    )}
+                  </AnimatePresence>
                   {/* Dropdown notifications drawer */}
                   <AnimatePresence>
                     {showNotificationsDropdown && (

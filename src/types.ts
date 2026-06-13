@@ -28,6 +28,7 @@ export interface AppSettings {
   pin: string;
   isPinSet: boolean;
   pinHint?: string; // Optional user PIN hint
+  userName?: string; // Optional user profile display name
   alertThresholdPercentage?: number; // User-customizable notification percentage (fallback/default 80)
   categoryThresholds?: Record<string, number>; // Map of category names to specific alert percentages (e.g. {"Food": 75})
   overallThresholdPercentage?: number; // Customizable overall total budget threshold percentage

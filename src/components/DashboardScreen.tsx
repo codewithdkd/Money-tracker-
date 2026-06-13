@@ -156,10 +156,15 @@ export default function DashboardScreen({ expenses, categories, budgets, setting
       {/* Target Monthly Summary Section */}
       <div>
         <div className="flex items-center justify-between mb-2">
-          <h2 className="text-sm font-black text-slate-800 dark:text-slate-100 uppercase tracking-widest flex items-center gap-1.5 font-mono">
-            <Calendar className="h-4 w-4 text-indigo-500" />
-            June 2026
-          </h2>
+          <div className="flex flex-col">
+            <span className="text-[9px] text-slate-400 dark:text-slate-500 font-bold uppercase tracking-wider font-mono">
+              Welcome back, {settings.userName || 'Hope'}!
+            </span>
+            <h2 className="text-sm font-black text-slate-800 dark:text-slate-100 uppercase tracking-widest flex items-center gap-1.5 font-mono mt-0.5">
+              <Calendar className="h-4 w-4 text-indigo-500" />
+              June 2026
+            </h2>
+          </div>
           {onLockApp && (
             <button
               type="button"

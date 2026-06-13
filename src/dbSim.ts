@@ -50,6 +50,7 @@ const DEFAULT_SETTINGS: AppSettings = {
   pin: '1234',
   isPinSet: true, // Default set to 1234, but on first run we can trigger set-up if we want or pre-set
   pinHint: 'Digits 1-4 in ascending order',
+  userName: 'Hope',
   alertThresholdPercentage: 80,
   darkMode: false,
   backupFrequency: 'Daily',

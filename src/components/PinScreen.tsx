@@ -11,7 +11,7 @@ import { AppSettings } from '../types';
 interface PinScreenProps {
   settings: AppSettings;
   onUnlock: () => void;
-  onSetPin: (newPin: string, hint?: string) => void;
+  onSetPin: (newPin: string, hint?: string, userName?: string) => void;
 }
 
 export default function PinScreen({ settings, onUnlock, onSetPin }: PinScreenProps) {
@@ -22,6 +22,7 @@ export default function PinScreen({ settings, onUnlock, onSetPin }: PinScreenPro
   const [tempPin, setTempPin] = useState<string>('');
   const [showHint, setShowHint] = useState<boolean>(false);
   const [customHint, setCustomHint] = useState<string>('');
+  const [customName, setCustomName] = useState<string>(settings.userName || '');
 
   useEffect(() => {
     // If PIN is loaded empty, trigger setup mode automatically
@@ -99,7 +100,7 @@ export default function PinScreen({ settings, onUnlock, onSetPin }: PinScreenPro
   };
 
   const handleFinishSetup = () => {
-    onSetPin(tempPin, customHint || 'No hint configured');
+    onSetPin(tempPin, customHint || 'No hint configured', customName || 'Hope');
     setIsSetupMode(false);
     setPinInput('');
     setSetupStep(1);
@@ -131,7 +132,7 @@ export default function PinScreen({ settings, onUnlock, onSetPin }: PinScreenPro
         </motion.div>
 
         <h1 className="text-xl font-bold text-slate-800 dark:text-slate-100 tracking-tight">
-          Welcome Hope
+          {isSetupMode ? 'Create New Profile PIN' : `Welcome ${settings.userName || 'Hope'}`}
         </h1>
         <p className="text-xs text-slate-500 dark:text-slate-400 mt-2 max-w-xs">
           {isSetupMode
@@ -139,7 +140,7 @@ export default function PinScreen({ settings, onUnlock, onSetPin }: PinScreenPro
               ? 'Secure your offline database. Enter a 4-Digit PIN to register.'
               : setupStep === 2
               ? 'Re-enter your 4-digit PIN to confirm database encryption.'
-              : 'Create an optional security hint to recover this PIN code later.'
+              : 'Add your profile details and optional security hint.'
             : 'Enter PIN to securely access offline financial records.'}
         </p>
 
@@ -151,24 +152,36 @@ export default function PinScreen({ settings, onUnlock, onSetPin }: PinScreenPro
       </div>
 
       {setupStep === 3 ? (
-        /* Setup step 3 hint input card style */
+        /* Setup step 3 hint and name input card style */
         <div className="flex-1 flex flex-col justify-center items-center px-4 max-w-xs mx-auto w-full space-y-4">
-          <div className="w-full">
-            <label className="text-[10px] text-slate-400 dark:text-slate-500 font-bold uppercase block tracking-wider mb-1.5 text-left">PIN Hint (Self Reminders)</label>
-            <input
-              type="text"
-              placeholder="e.g. Last digits of my phone number"
-              value={customHint}
-              onChange={(e) => setCustomHint(e.target.value)}
-              className="w-full bg-white dark:bg-slate-800 text-slate-800 dark:text-slate-100 p-3 rounded-xl border border-slate-205 dark:border-slate-700 text-xs text-center outline-none ring-2 ring-transparent focus:ring-indigo-500 transition-all font-sans font-medium"
-              autoFocus
-            />
+          <div className="w-full space-y-3">
+            <div>
+              <label className="text-[10px] text-indigo-500 dark:text-indigo-400 font-bold uppercase block tracking-wider mb-1 text-left">Your Profile Name</label>
+              <input
+                type="text"
+                placeholder="e.g. Deepak"
+                value={customName}
+                onChange={(e) => setCustomName(e.target.value)}
+                className="w-full bg-white dark:bg-slate-800 text-slate-800 dark:text-slate-100 p-3 rounded-xl border border-slate-200 dark:border-slate-700 text-xs text-center outline-none ring-2 ring-transparent focus:ring-indigo-500 transition-all font-sans font-medium"
+                autoFocus
+              />
+            </div>
+            <div>
+              <label className="text-[10px] text-slate-400 dark:text-slate-500 font-bold uppercase block tracking-wider mb-1 text-left">PIN Hint (Self Reminders)</label>
+              <input
+                type="text"
+                placeholder="e.g. Last digits of my phone number"
+                value={customHint}
+                onChange={(e) => setCustomHint(e.target.value)}
+                className="w-full bg-white dark:bg-slate-800 text-slate-800 dark:text-slate-100 p-3 rounded-xl border border-slate-200 dark:border-slate-700 text-xs text-center outline-none ring-2 ring-transparent focus:ring-indigo-500 transition-all font-sans font-medium"
+              />
+            </div>
           </div>
           <button
             onClick={handleFinishSetup}
             className="w-full py-2.5 bg-indigo-600 hover:bg-indigo-700 active:scale-95 text-white rounded-xl text-xs font-bold shadow-md cursor-pointer transition-all duration-150 border border-indigo-500/30"
           >
-            Save PIN & Security Hint
+            Save Profile & Access PIN
           </button>
         </div>
       ) : (

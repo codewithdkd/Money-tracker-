@@ -2,7 +2,8 @@ const CACHE_NAME = "expense-tracker-cache-v1";
 const STATIC_ASSETS = [
   "/",
   "/index.html",
-  "/manifest.json"
+  "/manifest.json",
+  "/icon.svg"
 ];
 
 // On Service Worker Installation: cache static assets
