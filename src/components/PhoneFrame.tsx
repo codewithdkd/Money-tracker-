@@ -23,9 +23,11 @@ import {
   Calendar,
   Activity,
   Menu,
-  ChevronDown
+  ChevronDown,
+  X,
+  Wallet
 } from 'lucide-react';
-import { VirtualExpense, VirtualCategory, VirtualBudget, AppSettings, NotificationLog } from '../types';
+import { VirtualExpense, VirtualCategory, VirtualBudget, AppSettings, NotificationLog, MoneySource } from '../types';
 import { DbSim } from '../dbSim';
 
 // Render imports
@@ -34,16 +36,19 @@ import DashboardScreen from './DashboardScreen';
 import AddExpenseScreen from './AddExpenseScreen';
 import AnalysisScreen from './AnalysisScreen';
 import SettingsScreen from './SettingsScreen';
+import SourcesScreen from './SourcesScreen';
 
 interface PhoneFrameProps {
   onAddCategory: (cat: VirtualCategory) => void;
   expenses: VirtualExpense[];
   categories: VirtualCategory[];
   budgets: VirtualBudget[];
+  moneySources: MoneySource[];
   settings: AppSettings;
   setExpenses: React.Dispatch<React.SetStateAction<VirtualExpense[]>>;
   setCategories: React.Dispatch<React.SetStateAction<VirtualCategory[]>>;
   setBudgets: React.Dispatch<React.SetStateAction<VirtualBudget[]>>;
+  setMoneySources: React.Dispatch<React.SetStateAction<MoneySource[]>>;
   setSettings: React.Dispatch<React.SetStateAction<AppSettings>>;
   onLockApp: () => void;
   isLocked: boolean;
@@ -55,17 +60,33 @@ export default function PhoneFrame({
   expenses,
   categories,
   budgets,
+  moneySources,
   settings,
   setExpenses,
   setCategories,
   setBudgets,
-  setSettings,
+  setMoneySources,
+  setSettings: rawSetSettings,
   onLockApp,
   isLocked,
   setIsLocked
 }: PhoneFrameProps) {
+  // Intecept setSettings to guarantee instant database persistence
+  const setSettings: React.Dispatch<React.SetStateAction<AppSettings>> = (value) => {
+    if (typeof value === 'function') {
+      rawSetSettings(prev => {
+        const next = value(prev);
+        DbSim.saveSettings(next);
+        return next;
+      });
+    } else {
+      DbSim.saveSettings(value);
+      rawSetSettings(value);
+    }
+  };
+
   // Navigation State
-  const [activeTab, setActiveTab] = useState<'dashboard' | 'add' | 'analysis' | 'settings'>('dashboard');
+  const [activeTab, setActiveTab] = useState<'dashboard' | 'add' | 'accounts' | 'analysis' | 'settings'>('dashboard');
 
   // Trigger PIN setup or bypass based on configuration
   const handleUnlock = () => {
@@ -91,6 +112,8 @@ export default function PhoneFrame({
   const [incomingAlert, setIncomingAlert] = useState<{ title: string; message: string } | null>(null);
   const [currentTime, setCurrentTime] = useState<string>('');
   const [currentDateString, setCurrentDateString] = useState<string>('');
+  const [showNameModal, setShowNameModal] = useState<boolean>(false);
+  const [tempProfileName, setTempProfileName] = useState<string>('');
 
   useEffect(() => {
     const updateTime = () => {
@@ -183,12 +206,14 @@ export default function PhoneFrame({
   // Simulated Report Exports PDF & Excel in react sandbox
   const handleDownloadReport = (format: 'pdf' | 'excel', scope: 'monthly' | 'annual') => {
     const period = scope === 'monthly' ? 'June 2026' : 'Year 2026';
+    const currencyStr = settings.currency === '₹' ? 'INR' : (settings.currency || '₹');
+    const currencySymbol = settings.currency || '₹';
     
     if (format === 'excel') {
       // Create CSV mock mimicking sheet output
       const csvContent = "data:text/csv;charset=utf-8," 
         + `Period,${period} Transaction Ledger\n`
-        + "Date,Category,Subcategory,Amount (INR),Payment Mode,Notes\n"
+        + `Date,Category,Subcategory,Amount (${currencyStr}),Payment Mode,Notes\n`
         + expenses.map(e => `"${e.date}","${e.category}","${e.subcategory}","${e.amount}","${e.paymentMode}","${e.notes}"`).join("\n");
       
       const encodedUri = encodeURI(csvContent);
@@ -235,7 +260,7 @@ export default function PhoneFrame({
               <p>Requested Scope: <strong>${period} Report Sheet</strong></p>
               
               <div class="metric-box">
-                Total Expenditure Summary: INR ${totalSectoredSum.toLocaleString()}
+                Total Expenditure Summary: ${currencyStr} ${totalSectoredSum.toLocaleString()}
               </div>
 
               <h3>Category Allocations</h3>
@@ -243,14 +268,14 @@ export default function PhoneFrame({
                 <thead>
                   <tr>
                     <th>Category</th>
-                    <th class="text-right">Sum (INR)</th>
+                    <th class="text-right">Sum (${currencyStr})</th>
                   </tr>
                 </thead>
                 <tbody>
                   ${categoriesSummary.map(c => `
                     <tr>
                       <td>${c.name}</td>
-                      <td class="text-right">₹${c.sum.toLocaleString()}</td>
+                      <td class="text-right">${currencySymbol}${c.sum.toLocaleString()}</td>
                     </tr>
                   `).join('')}
                 </tbody>
@@ -264,7 +289,7 @@ export default function PhoneFrame({
                     <th>Category</th>
                     <th>Subcategory</th>
                     <th>Payment</th>
-                    <th class="text-right">Amount (INR)</th>
+                    <th class="text-right">Amount (${currencyStr})</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -274,7 +299,7 @@ export default function PhoneFrame({
                       <td>${e.category}</td>
                       <td>${e.subcategory}</td>
                       <td>${e.paymentMode}</td>
-                      <td class="text-right">₹${e.amount}</td>
+                      <td class="text-right">${currencySymbol}${e.amount}</td>
                     </tr>
                   `).join('')}
                 </tbody>
@@ -354,7 +379,7 @@ export default function PhoneFrame({
       </AnimatePresence>
 
       {/* Frame wrapper mimicking luxurious Pixel phone hardware */}
-      <div className="w-full max-w-[390px] h-[780px] bg-slate-950 rounded-[40px] p-3 shadow-[0_25px_60px_-15px_rgba(0,0,0,0.5)] border-4 border-slate-900 flex flex-col justify-between overflow-hidden relative group/frame">
+      <div className="w-[390px] max-w-full h-[780px] bg-slate-950 rounded-[40px] p-3 shadow-[0_25px_60px_-15px_rgba(0,0,0,0.5)] border-4 border-slate-900 flex flex-col justify-between overflow-hidden relative group/frame">
         
         {/* Dynamic camera notch pinhole */}
         <div className="absolute top-4 left-1/2 -translate-x-1/2 h-4 w-12 bg-black rounded-full z-45 flex items-center justify-center gap-1">
@@ -373,9 +398,12 @@ export default function PhoneFrame({
             </div>
             
             <button 
-              onClick={() => setActiveTab('settings')}
+              onClick={() => {
+                setTempProfileName(settings.userName || 'User');
+                setShowNameModal(true);
+              }}
               className="flex items-center gap-1.5 bg-indigo-50 dark:bg-slate-800 hover:bg-indigo-100 dark:hover:bg-slate-700 px-2.5 py-0.5 rounded-full text-[10px] font-bold text-indigo-600 dark:text-indigo-400 border border-indigo-150/40 dark:border-slate-700 cursor-pointer transition-all"
-              title="Open Settings Details"
+              title="Edit Profile Name"
             >
               <div className="h-3.5 w-3.5 rounded-full bg-indigo-600 text-[8px] text-white font-black flex items-center justify-center">
                 {(settings.userName || 'User').charAt(0).toUpperCase()}
@@ -458,6 +486,83 @@ export default function PhoneFrame({
                       </motion.div>
                     )}
                   </AnimatePresence>
+
+                  {/* Edit Profile Display Name Overlay Modal */}
+                  <AnimatePresence>
+                    {showNameModal && (
+                      <motion.div
+                        initial={{ opacity: 0 }}
+                        animate={{ opacity: 1 }}
+                        exit={{ opacity: 0 }}
+                        className="absolute inset-0 bg-slate-950/80 backdrop-blur-md z-50 flex flex-col items-center justify-center p-6"
+                      >
+                        <motion.div
+                          initial={{ scale: 0.9, y: 20 }}
+                          animate={{ scale: 1, y: 0 }}
+                          exit={{ scale: 0.9, y: 20 }}
+                          className="bg-white dark:bg-slate-850 p-5 rounded-3xl border border-slate-200 dark:border-slate-805 shadow-2xl max-w-xs w-full space-y-4 font-sans text-xs"
+                        >
+                          <div className="flex justify-between items-center border-b border-slate-100 dark:border-slate-800 pb-2">
+                            <h3 className="font-extrabold text-slate-800 dark:text-slate-100 uppercase tracking-wider font-mono">
+                              Edit Display Name
+                            </h3>
+                            <button 
+                              onClick={() => setShowNameModal(false)}
+                              className="text-slate-400 hover:text-rose-500 cursor-pointer"
+                            >
+                              <X className="h-4 w-4" />
+                            </button>
+                          </div>
+
+                          <div className="space-y-1.5">
+                            <span className="text-[10px] text-slate-400 dark:text-slate-500 font-bold uppercase font-mono">
+                              Your Display Name
+                            </span>
+                            <input 
+                              type="text"
+                              value={tempProfileName}
+                              onChange={(e) => setTempProfileName(e.target.value)}
+                              placeholder="e.g. Deepak"
+                              className="w-full bg-slate-50 dark:bg-slate-900 px-3 py-2.5 rounded-xl border border-slate-200 dark:border-slate-800 font-bold text-slate-800 dark:text-slate-100 outline-none focus:ring-2 focus:ring-indigo-500 transition-all text-xs"
+                              onKeyDown={(e) => {
+                                if (e.key === 'Enter') {
+                                  const trimmed = tempProfileName.trim();
+                                  if (trimmed) {
+                                    handleUpdatePin(settings.pin, settings.pinHint, trimmed);
+                                    handleTriggerNotification('Profile Name Change', `Perfect! Greeting cards updated to ${trimmed}.`);
+                                    setShowNameModal(false);
+                                  }
+                                }
+                              }}
+                            />
+                          </div>
+
+                          <div className="flex gap-2 pt-1">
+                            <button
+                              onClick={() => setShowNameModal(false)}
+                              className="flex-1 py-2 bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-750 text-slate-700 dark:text-slate-200 font-bold rounded-xl font-mono uppercase text-[10px] cursor-pointer transition-colors"
+                            >
+                              Cancel
+                            </button>
+                            <button
+                              onClick={() => {
+                                const trimmed = tempProfileName.trim();
+                                if (trimmed) {
+                                  handleUpdatePin(settings.pin, settings.pinHint, trimmed);
+                                  handleTriggerNotification('Profile Name Change', `Perfect! Greeting cards updated to ${trimmed}.`);
+                                  setShowNameModal(false);
+                                }
+                              }}
+                              className="flex-1 py-2 bg-[#4f46e5] hover:bg-indigo-700 text-white font-bold rounded-xl font-mono uppercase text-[10px] cursor-pointer transition-colors"
+                            >
+                              Save Name
+                            </button>
+                          </div>
+                        </motion.div>
+                      </motion.div>
+                    )}
+                  </AnimatePresence>
+
                   {/* Dropdown notifications drawer */}
                   <AnimatePresence>
                     {showNotificationsDropdown && (
@@ -508,8 +613,10 @@ export default function PhoneFrame({
                           expenses={expenses}
                           categories={categories}
                           budgets={budgets}
+                          moneySources={moneySources}
                           settings={settings}
                           onLockApp={onLockApp}
+                          setActiveTab={setActiveTab}
                         />
                       </motion.div>
                     )}
@@ -527,6 +634,7 @@ export default function PhoneFrame({
                           expenses={expenses}
                           categories={categories}
                           budgets={budgets}
+                          moneySources={moneySources}
                           onAddExpense={handleAddNewExpense}
                           onUpdateExpense={handleUpdateExistingExpense}
                           onDeleteExpense={handleDeleteExistingExpense}
@@ -544,6 +652,28 @@ export default function PhoneFrame({
                       </motion.div>
                     )}
 
+                    {activeTab === 'accounts' && (
+                      <motion.div
+                        key="accounts"
+                        initial={{ opacity: 0, x: -10 }}
+                        animate={{ opacity: 1, x: 0 }}
+                        exit={{ opacity: 0, x: 10 }}
+                        transition={{ duration: 0.15 }}
+                        className="flex-1 flex flex-col overflow-hidden"
+                      >
+                        <SourcesScreen
+                          expenses={expenses}
+                          moneySources={moneySources}
+                          onUpdateSources={(newSources) => {
+                            DbSim.saveMoneySources(newSources);
+                            setMoneySources(newSources);
+                          }}
+                          onAddSourceExpense={handleAddNewExpense}
+                          settings={settings}
+                        />
+                      </motion.div>
+                    )}
+
                     {activeTab === 'analysis' && (
                       <motion.div
                         key="analysis"
@@ -553,7 +683,7 @@ export default function PhoneFrame({
                         transition={{ duration: 0.15 }}
                         className="flex-1 flex flex-col overflow-hidden"
                       >
-                        <AnalysisScreen expenses={expenses} />
+                        <AnalysisScreen expenses={expenses} moneySources={moneySources} currencySymbol={settings.currency || '₹'} />
                       </motion.div>
                     )}
 
@@ -616,6 +746,19 @@ export default function PhoneFrame({
                   >
                     <PlusCircle className="h-5 w-5" />
                     <span className="text-[9px] font-bold mt-1 tracking-tighter">Add Expense</span>
+                  </button>
+
+                  {/* Tab button: Accounts */}
+                  <button
+                    onClick={() => setActiveTab('accounts')}
+                    className={`flex flex-col items-center justify-center p-2 rounded-xl transition-all cursor-pointer ${
+                      activeTab === 'accounts' 
+                        ? 'text-indigo-600 dark:text-indigo-400 scale-105' 
+                        : 'text-slate-400 hover:text-slate-500'
+                    }`}
+                  >
+                    <Wallet className="h-5 w-5" />
+                    <span className="text-[9px] font-bold mt-1 tracking-tighter">Accounts</span>
                   </button>
 
                   {/* Tab button: Analysis */}

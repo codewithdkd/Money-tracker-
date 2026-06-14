@@ -5,13 +5,15 @@
 
 import React, { useState, useEffect } from 'react';
 import { DbSim } from './dbSim';
-import { VirtualExpense, VirtualCategory, VirtualBudget, AppSettings } from './types';
+import { VirtualExpense, VirtualCategory, VirtualBudget, AppSettings, MoneySource } from './types';
 import PhoneFrame from './components/PhoneFrame';
+import FlutterCodeCenter from './components/FlutterCodeCenter';
 
 export default function App() {
   const [expenses, setExpenses] = useState<VirtualExpense[]>([]);
   const [categories, setCategories] = useState<VirtualCategory[]>([]);
   const [budgets, setBudgets] = useState<VirtualBudget[]>([]);
+  const [moneySources, setMoneySources] = useState<MoneySource[]>([]);
   const [settings, setSettings] = useState<AppSettings>({
     pin: '1234',
     isPinSet: true,
@@ -29,14 +31,17 @@ export default function App() {
   }, []);
 
   const reloadDatabaseState = () => {
-    const rawExpenses = DbSim.getExpenses();
+    // Process any active recurring entries to generate occurrences
+    const rawExpenses = DbSim.processRecurringTransactions();
     const rawCategories = DbSim.getCategories();
     const rawBudgets = DbSim.getBudgets();
+    const rawSources = DbSim.getMoneySources();
     const rawSettings = DbSim.getSettings();
 
     setExpenses(rawExpenses);
     setCategories(rawCategories);
     setBudgets(rawBudgets);
+    setMoneySources(rawSources);
     setSettings(rawSettings);
 
     // Apply global body dark class reflecting settings
@@ -67,22 +72,30 @@ export default function App() {
   }, [settings.darkMode]);
 
   return (
-    <div className="min-h-screen bg-slate-100 dark:bg-slate-950 flex flex-col justify-center items-center overflow-hidden">
-      <div className="w-full max-w-full flex-1 flex flex-col justify-center items-center">
+    <div className="min-h-screen w-screen bg-slate-100 dark:bg-slate-950 flex flex-col lg:flex-row overflow-hidden">
+      {/* Interactive Mobile Emulator Block */}
+      <div className="flex-1 flex flex-col justify-center items-center p-4 overflow-y-auto lg:overflow-hidden select-none">
         <PhoneFrame
           onAddCategory={handleAddCategory}
           expenses={expenses}
           categories={categories}
           budgets={budgets}
+          moneySources={moneySources}
           settings={settings}
           setExpenses={setExpenses}
           setCategories={setCategories}
           setBudgets={setBudgets}
+          setMoneySources={setMoneySources}
           setSettings={setSettings}
           onLockApp={handleLockApp}
           isLocked={isLocked}
           setIsLocked={setIsLocked}
         />
+      </div>
+
+      {/* Flutter Mobile Specifications & Dart SQLite Code Base panel */}
+      <div className="w-full lg:w-[480px] xl:w-[580px] border-t lg:border-t-0 lg:border-l border-slate-200 dark:border-slate-800 flex flex-col bg-slate-900 overflow-hidden h-96 lg:h-full">
+        <FlutterCodeCenter />
       </div>
     </div>
   );

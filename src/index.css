@@ -1,1 +1,131 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=JetBrains+Mono:wght@400;500;700&family=Space+Grotesk:wght@400;500;600;700;750&display=swap');
 @import "tailwindcss";
+
+@theme {
+  --color-slate-50: #0D1730;
+  --color-slate-100: #E6EBF5;
+  --color-slate-150: #1C2B44;
+  --color-slate-200: #B4C0D4;
+  --color-slate-205: #1C2B44; 
+  --color-slate-300: #9AA6B8;
+  --color-slate-400: #A7B1C2;
+  --color-slate-450: #8896AB;
+  --color-slate-550: #718096;
+  
+  --color-slate-800: #172338;
+  --color-slate-850: #1A2740;
+  --color-slate-900: #08111F;
+  --color-slate-950: #050B14;
+  
+  /* Keep standard theme white to avoid styling confusion */
+  --color-white: #FFFFFF;
+  
+  /* Accent purples & indigo violet */
+  --color-indigo-400: #7A6BFF;
+  --color-indigo-500: #5B4CFF;
+  --color-indigo-600: #5B4CFF;
+  --color-indigo-700: #6C5CFF;
+  --color-indigo-800: #574FD3;
+  --color-indigo-900: #111438;
+  --color-indigo-950: #0A0B1E;
+  
+  /* Text defaults */
+  --color-slate-700: #E6EBF5;
+  --color-slate-600: #A7B1C2;
+
+  --font-sans: "Space Grotesk", "Inter", ui-sans-serif, system-ui, sans-serif;
+  --font-mono: "JetBrains Mono", ui-monospace, SFMono-Regular, monospace;
+}
+
+@layer base {
+  body {
+    background-color: #08111F;
+    color: #FFFFFF;
+    font-family: var(--font-sans);
+  }
+}
+
+@layer utilities {
+  /* Override bg-white to match our dark elevated fintech surface card backgrounds */
+  .bg-white {
+    background-color: #172338 !important;
+  }
+}
+
+/* Custom premium fintech smooth scrollbars */
+::-webkit-scrollbar {
+  width: 5px;
+  height: 5px;
+}
+
+::-webkit-scrollbar-track {
+  background: #08111F;
+  border-radius: 99px;
+}
+
+::-webkit-scrollbar-thumb {
+  background: #1D2E4D;
+  border-radius: 99px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: #5B4CFF;
+}
+
+/* Custom visual glow classes */
+.glow-primary {
+  box-shadow: 0 0 20px rgba(91, 76, 255, 0.35);
+}
+
+.glow-primary:hover {
+  box-shadow: 0 0 25px rgba(91, 76, 255, 0.55);
+}
+
+.gradient-premium-purple {
+  background: linear-gradient(135deg, #5B4CFF 0%, #6C5CFF 50%, #7A6BFF 100%);
+}
+
+/* Premium Custom Range Sliders */
+input[type="range"] {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 100%;
+  height: 7px;
+  background: #1C2B44 !important; /* Visual track background corresponding to deep slate theme */
+  border-radius: 99px;
+  outline: none;
+}
+
+input[type="range"]::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: #5B4CFF; /* Royal purple accent matching main applet colors */
+  cursor: pointer;
+  border: 1.5px solid #FFFFFF;
+  box-shadow: 0 0 10px rgba(91, 76, 255, 0.8);
+  transition: transform 0.15s ease-in-out, background-color 0.15s;
+}
+
+input[type="range"]::-webkit-slider-thumb:hover {
+  transform: scale(1.25);
+  background-color: #7A6BFF;
+}
+
+input[type="range"]::-moz-range-thumb {
+  width: 16px;
+  height: 16px;
+  border: 1.5px solid #FFFFFF;
+  border-radius: 50%;
+  background: #5B4CFF;
+  cursor: pointer;
+  box-shadow: 0 0 10px rgba(91, 76, 255, 0.8);
+  transition: transform 0.15s ease-in-out, background-color 0.15s;
+}
+
+input[type="range"]::-moz-range-thumb:hover {
+  transform: scale(1.25);
+  background-color: #7A6BFF;
+}

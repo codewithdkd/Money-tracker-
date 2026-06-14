@@ -11,12 +11,37 @@ export interface VirtualExpense {
   subcategory: string;
   notes: string;
   paymentMode: 'Cash' | 'UPI' | 'Credit Card' | 'Debit Card' | 'Bank Transfer';
+  transactionType?: TransactionType;
+  personName?: string; // loan partner or beneficiary
+  createdAt?: string;
+  updatedAt?: string;
+  parentLoanId?: string; // if this is a repayment or return of a loan, link to parent loan transaction
+  sourceAccountId?: string; // For standard Expense, Income, LoanGiven, LoanTaken
+  fromSourceAccountId?: string; // For Transfer from account
+  toSourceAccountId?: string; // For Transfer to account
+  recurring?: {
+    frequency: 'Daily' | 'Weekly' | 'Monthly' | 'Yearly';
+    active: boolean;
+    lastGenerated?: string; // YYYY-MM-DD
+  };
 }
+
+export interface MoneySource {
+  id: string;
+  name: string;
+  openingBalances: Record<string, number>; // Record of YYYY-MM -> Balance (e.g. {"2026-06": 5000})
+  archived: boolean;
+  createdAt: string;
+  archivedAt?: string;
+}
+
+export type TransactionType = 'Expense' | 'Income' | 'LoanGiven' | 'LoanTaken' | 'Transfer';
 
 export interface VirtualCategory {
   id: string;
   name: string;
   subcategories: string[];
+  type?: 'expense' | 'income';
 }
 
 export interface VirtualBudget {
@@ -38,6 +63,7 @@ export interface AppSettings {
   lastBackupDate: string | null;
   googleDriveConnected?: boolean;
   googleDriveEmail?: string | null;
+  currency?: string; // Selected currency symbol (default: '₹')
 }
 
 export interface NotificationLog {

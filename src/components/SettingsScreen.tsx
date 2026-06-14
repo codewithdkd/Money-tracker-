@@ -3,35 +3,38 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import React, { useState, useRef } from 'react';
-import { 
-  Key, 
-  HardDrive, 
-  Bell, 
-  FileSpreadsheet, 
-  CloudLightning, 
-  Trash2, 
-  Sun, 
-  Moon, 
-  UploadCloud, 
-  Download, 
-  Check, 
-  RefreshCw,
-  Notebook,
+import React, { useState, useRef, useEffect } from "react";
+import * as XLSX from "xlsx";
+import { motion, AnimatePresence } from "motion/react";
+import {
+  Key,
+  HardDrive,
+  FileSpreadsheet,
+  Trash2,
+  Download,
+  Check,
   FolderPlus,
   Plus,
   X,
-  Sliders,
-  CheckCircle,
   FileText,
-  Calendar,
   AlertCircle,
+  User,
+  Settings,
+  ChevronDown,
+  ChevronUp,
+  Percent,
+  TrendingDown,
+  TrendingUp,
   Smartphone,
-  ShieldAlert,
-  User
-} from 'lucide-react';
-import { AppSettings, VirtualExpense, VirtualCategory, VirtualBudget } from '../types';
-import { DbSim } from '../dbSim';
+  Cloud,
+} from "lucide-react";
+import {
+  AppSettings,
+  VirtualExpense,
+  VirtualCategory,
+  VirtualBudget,
+} from "../types";
+import { DbSim } from "../dbSim";
 
 interface SettingsScreenProps {
   settings: AppSettings;
@@ -49,1616 +52,1979 @@ interface SettingsScreenProps {
 export default function SettingsScreen({
   settings,
   onUpdateSettings,
-  onBackup,
-  onRestore,
   onTriggerNotification,
   expenses = [],
   categories = [],
   budgets = [],
   onUpdateBudgets,
-  onUpdateCategories
+  onUpdateCategories,
 }: SettingsScreenProps) {
-  // PIN management
+  // Hardcoded default Indian Rupees symbol
+  const currencySymbol = "₹";
+
+  // 1. Reports & Statement Exporter States
+  const [timeframeInput, setTimeframeInput] =
+    useState<string>("2026-06, 2026-05");
+  const [activeTimeframePills, setActiveTimeframePills] = useState<string[]>([
+    "2026-06",
+    "2026-05",
+  ]);
+  const [exportFormat, setExportFormat] = useState<"pdf" | "excel">("pdf");
+
+  // 2. Category Creation & Checking/Modifying States
+  const [newCatName, setNewCatName] = useState<string>("");
+  const [newCatType, setNewCatType] = useState<"expense" | "income">("expense");
+  const [newCatSubcats, setNewCatSubcats] = useState<string>("");
+  const [newCatBudget, setNewCatBudget] = useState<string>("");
+  const [newCatThreshold, setNewCatThreshold] = useState<number>(80);
+
+  const [expandedCatId, setExpandedCatId] = useState<string | null>(null);
+  const [inlineSubcatInputs, setInlineSubcatInputs] = useState<
+    Record<string, string>
+  >({});
+  const [categoryBudgetInputs, setCategoryBudgetInputs] = useState<
+    Record<string, string>
+  >({});
+  const [isCategoryListCollapsed, setIsCategoryListCollapsed] =
+    useState<boolean>(false);
+  const [isEntriesListCollapsed, setIsEntriesListCollapsed] =
+    useState<boolean>(false);
+  const [isExpenseListOpen, setIsExpenseListOpen] = useState<boolean>(false);
+  const [isIncomeListOpen, setIsIncomeListOpen] = useState<boolean>(false);
+  const [deleteConfirms, setDeleteConfirms] = useState<Record<string, boolean>>(
+    {},
+  );
+  const [wipeConfirm, setWipeConfirm] = useState<boolean>(false);
+
+  // 3. Overall Budget alert threshold
+  const [alertThreshold, setAlertThreshold] = useState<number>(
+    settings.alertThresholdPercentage || 80,
+  );
+
+  // 4. PIN Change Lock security states
   const [pinChangeOpen, setPinChangeOpen] = useState<boolean>(false);
-  const [oldPin, setOldPin] = useState<string>('');
-  const [newPin, setNewPin] = useState<string>('');
-  const [confirmPin, setConfirmPin] = useState<string>('');
-  const [customPinHint, setCustomPinHint] = useState<string>(settings.pinHint || '');
-  const [pinError, setPinError] = useState<string>('');
+  const [oldPin, setOldPin] = useState<string>("");
+  const [newPin, setNewPin] = useState<string>("");
+  const [confirmPin, setConfirmPin] = useState<string>("");
+  const [customPinHint, setCustomPinHint] = useState<string>(
+    settings.pinHint || "",
+  );
+  const [pinError, setPinError] = useState<string>("");
   const [pinSuccess, setPinSuccess] = useState<boolean>(false);
+  const [showMobileInstructions, setShowMobileInstructions] =
+    useState<boolean>(false);
 
-  // Profile Settings state
-  const [profileName, setProfileName] = useState<string>(settings.userName || '');
-  const [nameSuccess, setNameSuccess] = useState<boolean>(false);
+  // Ref files element
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const excelImportInputRef = useRef<HTMLInputElement>(null);
 
-  const handleSaveProfileName = () => {
-    const trimmed = profileName.trim();
-    if (!trimmed) return;
-    const updated = {
-      ...settings,
-      userName: trimmed
-    };
-    onUpdateSettings(updated);
-    setNameSuccess(true);
-    onTriggerNotification(
-      'Profile Updated',
-      `Greetings personalized for "${trimmed}" successfully!`
-    );
-    setTimeout(() => setNameSuccess(false), 3000);
+  // Helper timeframe filter
+  const parseAndTimeframeFilter = (
+    raw: VirtualExpense[],
+    timeframeStr: string,
+  ) => {
+    const trimmedStr = timeframeStr.trim().toLowerCase();
+    if (!trimmedStr || trimmedStr === "lifetime" || trimmedStr === "all") {
+      return raw;
+    }
+
+    const tokens = trimmedStr
+      .split(",")
+      .map((t) => t.trim())
+      .filter(Boolean);
+    if (tokens.length === 0) return raw;
+
+    return raw.filter((exp) => {
+      const dateStr = exp.date; // YYYY-MM-DD
+      return tokens.some((token) => {
+        return dateStr.startsWith(token);
+      });
+    });
   };
 
-  // Statement report exporter state
-  const [periodInputVal, setPeriodInputVal] = useState<string>('2026-06, 2026-05');
-  const [reportFormat, setReportFormat] = useState<'pdf' | 'excel'>('pdf');
+  // Helper to handle timeframe pill toggles
+  const handleTogglePill = (val: string) => {
+    let next: string[];
+    if (val === "lifetime") {
+      next = ["lifetime"];
+    } else {
+      next = activeTimeframePills.filter((p) => p !== "lifetime");
+      if (next.includes(val)) {
+        next = next.filter((p) => p !== val);
+      } else {
+        next = [...next, val];
+      }
+    }
+    if (next.length === 0) {
+      next = ["lifetime"];
+    }
+    setActiveTimeframePills(next);
+    setTimeframeInput(next.join(", "));
+  };
 
-  // Simulated sharing overlay states
-  const [shareSheetOpen, setShareSheetOpen] = useState<boolean>(false);
+  // Helper category thresholds setting
+  const handleUpdateCategoryThreshold = (catName: string, valStr: string) => {
+    const pct = parseInt(valStr);
+    if (isNaN(pct) || pct < 10 || pct > 100) return;
 
-  // Category & Subcategory setup state
-  const [showCategoriesList, setShowCategoriesList] = useState<boolean>(false);
-  const [expandedCategoryId, setExpandedCategoryId] = useState<string | null>(null);
-  const [newSubcategoryInputs, setNewSubcategoryInputs] = useState<Record<string, string>>({});
-  const [tempBudgetLimits, setTempBudgetLimits] = useState<Record<string, string>>({});
-
-  // Adding completely new Category state
-  const [addCatOpen, setAddCatOpen] = useState<boolean>(false);
-  const [newCatName, setNewCatName] = useState<string>('');
-  const [newCatBudget, setNewCatBudget] = useState<string>('5000');
-  const [newCatSubcategories, setNewCatSubcategories] = useState<string>('');
-  const [addCatError, setAddCatError] = useState<string>('');
-  const [addCatSuccess, setAddCatSuccess] = useState<boolean>(false);
-
-  // Cloud sync representation
-  const [syncing, setSyncing] = useState<boolean>(false);
-  const [syncStatus, setSyncStatus] = useState<string | null>(null);
-
-  // Google Drive Simulation authentication state flow
-  const [googleAuthOpen, setGoogleAuthOpen] = useState<boolean>(false);
-  const [googleAuthStep, setGoogleAuthStep] = useState<'choose' | 'consent' | 'authorizing' | 'success'>('choose');
-  const [googleSelectedEmail, setGoogleSelectedEmail] = useState<string>('deepakrajgir43@gmail.com');
-  const [googleCustomEmailInput, setGoogleCustomEmailInput] = useState<string>('');
-  const [googleAgreedScopes, setGoogleAgreedScopes] = useState<boolean>(false);
-  const [googleAuthProgress, setGoogleAuthProgress] = useState<number>(0);
-  const [googleAuthLog, setGoogleAuthLog] = useState<string>('');
-
-  const fileInputRef = useRef<HTMLInputElement>(null);
-
-  // Standalone PWA & Hardware Persistence states
-  const [isStoragePersistent, setIsStoragePersistent] = useState<boolean>(false);
-  const [isStandaloneApp, setIsStandaloneApp] = useState<boolean>(false);
-  const [deferredPrompt, setDeferredPrompt] = useState<any>(null);
-  const [showInstallGuide, setShowInstallGuide] = useState<boolean>(false);
-
-  React.useEffect(() => {
-    // 1. Standalone display check
-    const checkStandalone = () => {
-      const isStandalone = window.matchMedia('(display-mode: standalone)').matches || (navigator as any).standalone === true;
-      setIsStandaloneApp(isStandalone);
+    const updatedThresh = {
+      ...(settings.categoryThresholds || {}),
+      [catName]: pct,
     };
-    checkStandalone();
+    onUpdateSettings({
+      ...settings,
+      categoryThresholds: updatedThresh,
+    });
+  };
 
-    // 2. Storage persistent check
-    if (navigator.storage && navigator.storage.persisted) {
-      navigator.storage.persisted().then(persistent => {
-        setIsStoragePersistent(persistent);
+  // Create Category Handler
+  const handleCreateCategorySubmit = () => {
+    const trimmedName = newCatName.trim();
+    if (!trimmedName) {
+      alert("Fill out category name");
+      return;
+    }
+
+    if (
+      categories.some((c) => c.name.toLowerCase() === trimmedName.toLowerCase())
+    ) {
+      alert("A category with this name already exists.");
+      return;
+    }
+
+    const subList = newCatSubcats
+      .split(",")
+      .map((s) => s.trim())
+      .filter((s) => s.length > 0);
+
+    const newCatObj: VirtualCategory = {
+      id: "cat_" + Date.now(),
+      name: trimmedName,
+      subcategories: subList.length > 0 ? subList : ["General"],
+      type: newCatType,
+    };
+
+    const updatedCategories = [...categories, newCatObj];
+    onUpdateCategories(updatedCategories);
+
+    // If initial budget cap limit is specified for expense category
+    const limit = parseFloat(newCatBudget);
+    if (newCatType === "expense") {
+      if (!isNaN(limit) && limit > 0) {
+        const updatedBudgets = [
+          ...budgets,
+          { categoryName: trimmedName, limitAmount: limit },
+        ];
+        onUpdateBudgets(updatedBudgets);
+      }
+      // Save original threshold slider settings matching selection
+      const updatedThresh = {
+        ...(settings.categoryThresholds || {}),
+        [trimmedName]: newCatThreshold,
+      };
+      onUpdateSettings({
+        ...settings,
+        categoryThresholds: updatedThresh,
       });
     }
 
-    // 3. Capture beforeinstallprompt
-    const handleInstallPrompt = (e: Event) => {
-      e.preventDefault();
-      setDeferredPrompt(e);
-    };
-    window.addEventListener('beforeinstallprompt', handleInstallPrompt);
+    setNewCatName("");
+    setNewCatSubcats("");
+    setNewCatBudget("");
+    setNewCatThreshold(80);
+    onTriggerNotification(
+      "Category Created",
+      `Category "${trimmedName}" has been successfully added.`,
+    );
+  };
 
-    return () => {
-      window.removeEventListener('beforeinstallprompt', handleInstallPrompt);
-    };
-  }, []);
+  // Delete Category Handler
+  const handleDeleteCategory = (catId: string, catName: string) => {
+    if (
+      confirm(
+        `Are you sure you want to delete the category "${catName}"? This will also purge its limit budgets.`,
+      )
+    ) {
+      const updatedCategories = categories.filter((c) => c.id !== catId);
+      onUpdateCategories(updatedCategories);
 
-  const requestStoragePersistence = async () => {
-    if (navigator.storage && navigator.storage.persist) {
+      const updatedBudgets = budgets.filter((b) => b.categoryName !== catName);
+      onUpdateBudgets(updatedBudgets);
+
+      onTriggerNotification(
+        "Category Removed",
+        `Category "${catName}" has been removed.`,
+      );
+    }
+  };
+
+  // Inline Subcategory additions
+  const handleAddSubcatInline = (catId: string, catName: string) => {
+    const subName = (inlineSubcatInputs[catId] || "").trim();
+    if (!subName) return;
+
+    const updatedCategories = categories.map((c) => {
+      if (c.id === catId) {
+        if (c.subcategories.includes(subName)) {
+          alert("Subcategory already exists in this pool.");
+          return c;
+        }
+        return {
+          ...c,
+          subcategories: [...c.subcategories, subName],
+        };
+      }
+      return c;
+    });
+
+    onUpdateCategories(updatedCategories);
+    setInlineSubcatInputs((prev) => ({ ...prev, [catId]: "" }));
+    onTriggerNotification(
+      "Subcategory Added",
+      `Added "${subName}" to category "${catName}".`,
+    );
+  };
+
+  // Inline subcategory removals
+  const handleDeleteSubcatInline = (
+    catId: string,
+    subName: string,
+    catName: string,
+  ) => {
+    const updatedCategories = categories.map((c) => {
+      if (c.id === catId) {
+        return {
+          ...c,
+          subcategories: c.subcategories.filter((s) => s !== subName),
+        };
+      }
+      return c;
+    });
+    onUpdateCategories(updatedCategories);
+    onTriggerNotification(
+      "Subcategory Deleted",
+      `Removed "${subName}" from "${catName}".`,
+    );
+  };
+
+  // Budget Limits configurations
+  const handleUpdateCategoryBudget = (catName: string, amtStr: string) => {
+    const limit = parseFloat(amtStr);
+    if (isNaN(limit) || limit < 0) return;
+
+    let exists = budgets.some((b) => b.categoryName === catName);
+    let updated: VirtualBudget[];
+    if (exists) {
+      updated = budgets.map((b) =>
+        b.categoryName === catName ? { ...b, limitAmount: limit } : b,
+      );
+    } else {
+      updated = [...budgets, { categoryName: catName, limitAmount: limit }];
+    }
+    onUpdateBudgets(updated);
+  };
+
+  // Global Warning alert threshold saving
+  const handleSaveThreshold = (valStr: string) => {
+    const val = parseInt(valStr);
+    if (isNaN(val) || val <= 0 || val > 100) return;
+    setAlertThreshold(val);
+    onUpdateSettings({
+      ...settings,
+      alertThresholdPercentage: val,
+    });
+  };
+
+  // Master Excel workbook export handler
+  const handleExportToExcel = () => {
+    try {
+      const filteredExpenses = parseAndTimeframeFilter(
+        expenses,
+        timeframeInput,
+      );
+      if (filteredExpenses.length === 0) {
+        alert(
+          "No transactions identified in the chosen timeframe prefix filter: " +
+            timeframeInput,
+        );
+        return;
+      }
+
+      const txRows = filteredExpenses.map((e) => ({
+        ID: e.id,
+        Date: e.date,
+        Amount: e.amount,
+        Type: e.transactionType || "Expense",
+        Category: e.category,
+        Subcategory: e.subcategory,
+        PaymentMode: e.paymentMode,
+        PartyName: e.personName || "N/A",
+        Notes: e.notes || "",
+      }));
+      const wsTx = XLSX.utils.json_to_sheet(txRows);
+
+      const incomeRows = filteredExpenses
+        .filter((e) => e.transactionType === "Income")
+        .map((e) => ({
+          Date: e.date,
+          Category: e.category,
+          Subcategory: e.subcategory,
+          AmountSpent: e.amount,
+          Mode: e.paymentMode,
+          Description: e.notes || "",
+        }));
+      const wsInc = XLSX.utils.json_to_sheet(incomeRows);
+
+      const expenseRows = filteredExpenses
+        .filter((e) => e.transactionType === "Expense")
+        .map((e) => ({
+          Date: e.date,
+          Category: e.category,
+          Subcategory: e.subcategory,
+          AmountSpent: e.amount,
+          Mode: e.paymentMode,
+          Description: e.notes || "",
+        }));
+      const wsExp = XLSX.utils.json_to_sheet(expenseRows);
+
+      const wb = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(wb, wsTx, "Transactions");
+      XLSX.utils.book_append_sheet(wb, wsInc, "Income_Records");
+      XLSX.utils.book_append_sheet(wb, wsExp, "Expense_Records");
+
+      XLSX.writeFile(
+        wb,
+        `Finance_Ledger_Report_${timeframeInput.replace(/[^a-zA-Z0-9]/g, "_")}.xlsx`,
+      );
+      onTriggerNotification(
+        "Excel Generated",
+        `Master Spreadsheet exported for ${timeframeInput}.`,
+      );
+    } catch (e) {
+      console.error(e);
+      alert("Error building excel workbook.");
+    }
+  };
+
+  // Excel import handler
+  const handleImportExcelFile = (evt: React.ChangeEvent<HTMLInputElement>) => {
+    const file = evt.target.files?.[0];
+    if (!file) return;
+
+    const reader = new FileReader();
+    reader.onload = (e) => {
       try {
-        const isPersisted = await navigator.storage.persist();
-        setIsStoragePersistent(isPersisted);
-        if (isPersisted) {
-          onTriggerNotification(
-            'Hardware Storage Locked',
-            'Your local database data is permanently locked on your device hardware.'
+        const data = e.target?.result;
+        const workbook = XLSX.read(data, { type: "binary" });
+        const firstSheetName = workbook.SheetNames[0];
+        const rows = XLSX.utils.sheet_to_json<any>(
+          workbook.Sheets[firstSheetName],
+        );
+
+        if (rows.length === 0) {
+          alert("Sheets appears blank or unreadable.");
+          return;
+        }
+
+        const importedExpenses: VirtualExpense[] = [];
+        rows.forEach((row, idx) => {
+          const parsedAmount = parseFloat(
+            row.Amount || row.AmountSpent || row.AmountReceived || "0",
           );
-          alert('Success! Your device has approved persistent storage lock for this application. Data is permanently saved on device disk partition.');
+          if (parsedAmount > 0) {
+            importedExpenses.push({
+              id: `imp_ex_${Date.now()}_${idx}`,
+              date: row.Date || new Date().toISOString().substring(0, 10),
+              amount: parsedAmount,
+              category: row.Category || "Miscellaneous",
+              subcategory: row.Subcategory || "General Expenses",
+              notes: row.Notes || row.Description || "Excel ledger import",
+              paymentMode: (row.PaymentMode || row.Mode || "Cash") as any,
+              transactionType: (row.Type || "Expense") as any,
+              personName: row.PartyName || row.Partner || undefined,
+              createdAt: new Date().toISOString(),
+              updatedAt: new Date().toISOString(),
+            });
+          }
+        });
+
+        if (importedExpenses.length > 0) {
+          const merged = [...importedExpenses, ...expenses];
+          DbSim.saveExpenses(merged);
+          onTriggerNotification(
+            "Merged",
+            `Successfully recorded ${importedExpenses.length} log transactions.`,
+          );
+          alert(
+            `Successfully loaded ${importedExpenses.length} transactions from Excel workbook!`,
+          );
+          window.location.reload();
         } else {
-          alert('The device did not grant hardware lock storage. This is standard in some desktop browsers, but is typically granted automatically in installed home-screen mobile PWAs!');
+          alert('Unable to identify standard columns "Amount" or "Category".');
         }
       } catch (err) {
         console.error(err);
-        alert('An error occurred during storage lock handshake.');
+        alert("File read failure.");
       }
-    } else {
-      alert('Persistent storage controller API is not supported in this browser version.');
-    }
+    };
+    reader.readAsBinaryString(file);
   };
 
-  const handleTriggerInstall = async () => {
-    if (!deferredPrompt) {
-      alert("Installation helper cannot find active prompt because you are already in full screen standalone mode, or your browser handles installation directly via browser tools. Please click top-right menu block to add to Home Screen!");
+  // Executive printable state summary report
+  const handleExportToPDF = () => {
+    const printWindow = window.open("", "_blank");
+    if (!printWindow) {
+      alert(
+        "Pop-up display is blocked. Permit permission to print report PDF.",
+      );
       return;
     }
-    deferredPrompt.prompt();
-    const { outcome } = await deferredPrompt.userChoice;
-    if (outcome === 'accepted') {
-      onTriggerNotification('Installer Running', 'Starting standalone app container launcher registration...');
-    }
-    setDeferredPrompt(null);
+
+    const filteredExpenses = parseAndTimeframeFilter(expenses, timeframeInput);
+    const earned = filteredExpenses
+      .filter((e) => e.transactionType === "Income")
+      .reduce((s, e) => s + e.amount, 0);
+    const spent = filteredExpenses
+      .filter((e) => e.transactionType === "Expense")
+      .reduce((s, e) => s + e.amount, 0);
+    const lent = filteredExpenses
+      .filter((e) => e.transactionType === "LoanGiven")
+      .reduce((s, e) => s + e.amount, 0);
+    const borrowed = filteredExpenses
+      .filter((e) => e.transactionType === "LoanTaken")
+      .reduce((s, e) => s + e.amount, 0);
+
+    const userName = settings.userName || "Account User";
+
+    printWindow.document.write(`
+      <html>
+        <head>
+          <title>${userName} - Budget Balance Audit</title>
+          <style>
+            body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; padding: 30px; color: #1e293b; line-height: 1.5; }
+            .h { border-bottom: 2px solid #4f46e5; padding-bottom: 12px; margin-bottom: 20px; display: flex; justify-content: space-between; align-items: flex-end; }
+            h1 { font-size: 20px; margin: 0; color: #1e1b4b; text-transform: uppercase; }
+            .m { font-size: 11px; color: #64748b; }
+            .grid { display: grid; grid-template-cols: repeat(4, 1fr); gap: 15px; margin-bottom: 30px; }
+            .card { background: #f8fafc; border: 1px solid #e2e8f0; padding: 12px; border-radius: 8px; border-left: 4px solid #4f46e5; }
+            .card-lbl { font-size: 10px; text-transform: uppercase; color: #64748b; font-weight: bold; }
+            .card-val { font-size: 16px; font-weight: 800; margin-top: 5px; font-family: monospace; }
+            table { width: 100%; border-collapse: collapse; margin-top: 10px; }
+            th { background: #f1f5f9; padding: 8px 10px; font-size: 10px; text-transform: uppercase; text-align: left; }
+            td { padding: 8px 10px; font-size: 11px; border-bottom: 1px solid #e2e8f0; }
+            .rx { text-align: right; }
+            .col-in { color: #10b981; font-weight: bold; }
+            .col-ex { color: #ef4444; font-weight: bold; }
+          </style>
+        </head>
+        <body>
+          <div class="h">
+            <div>
+              <h1>Financial Wealth Statement Analysis</h1>
+              <div class="m">Audit for account owner: ${userName} &middot; Chosen Timeframe: ${timeframeInput}</div>
+            </div>
+            <div style="font-size: 10px; font-weight: bold; color: #4f46e5;">WALLET_SYSTEM_REPORT</div>
+          </div>
+          <div class="grid">
+            <div class="card" style="border-left-color: #10b981;">
+              <div class="card-lbl">Available Balance</div>
+              <div class="card-val">${currencySymbol} ${(earned - spent - lent + borrowed).toLocaleString()}</div>
+            </div>
+            <div class="card" style="border-left-color: #3b82f6;">
+              <div class="card-lbl">Total Income</div>
+              <div class="card-val">${currencySymbol} ${earned.toLocaleString()}</div>
+            </div>
+            <div class="card" style="border-left-color: #ef4444;">
+              <div class="card-lbl">Total Spending</div>
+              <div class="card-val">${currencySymbol} ${spent.toLocaleString()}</div>
+            </div>
+            <div class="card" style="border-left-color: #f59e0b;">
+              <div class="card-lbl">Lent Receivables</div>
+              <div class="card-val">${currencySymbol} ${lent.toLocaleString()}</div>
+            </div>
+          </div>
+          <h2 style="font-size: 14px; text-transform: uppercase; border-bottom: 1px solid #cbd5e1; padding-bottom: 4px; margin-top: 20px;">Transactions Log (First 150 items)</h2>
+          <table>
+            <thead>
+              <tr>
+                <th>Date</th>
+                <th>Type</th>
+                <th>Category</th>
+                <th>Subcategory</th>
+                <th>Channel Mode</th>
+                <th>Partner</th>
+                <th class="rx">Amount</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${filteredExpenses
+                .slice(0, 150)
+                .map((e) => {
+                  const isIn = e.transactionType === "Income";
+                  return `
+                  <tr>
+                    <td>${e.date}</td>
+                    <td style="text-transform: uppercase; font-weight: bold">${e.transactionType || "Expense"}</td>
+                    <td>${e.category}</td>
+                    <td>${e.subcategory}</td>
+                    <td>${e.paymentMode}</td>
+                    <td>${e.personName || "N/A"}</td>
+                    <td class="rx ${isIn ? "col-in" : "col-ex"}">${isIn ? "+" : "-"} ${currencySymbol} ${e.amount.toLocaleString()}</td>
+                  </tr>
+                `;
+                })
+                .join("")}
+            </tbody>
+          </table>
+          <p style="text-align: center; color: #94a3b8; font-size: 9px; margin-top: 50px; border-top: 1px solid #f1f5f9; padding-top: 10px;">
+            This statement was generated instantly using browser local database index repositories. Safeguarded under personal credentials.
+          </p>
+          <script>window.print();</script>
+        </body>
+      </html>
+    `);
   };
 
-  // Frequency handlers
-  const handleReminderChange = (freq: any) => {
-    onUpdateSettings({
-      ...settings,
-      reminderFrequency: freq
-    });
-    onTriggerNotification(
-      'Notification Frequency Modified',
-      `Reminders configured to trigger: ${freq}.`
-    );
-  };
+  const handleShareAction = () => {
+    try {
+      const filtered = parseAndTimeframeFilter(expenses, timeframeInput);
+      const spent = filtered
+        .filter((e) => e.transactionType === "Expense")
+        .reduce((s, e) => s + e.amount, 0);
+      const summaryText = `📊 Rupee Ledger Report:\n- Filter: ${timeframeInput}\n- Ledger logs: ${filtered.length}\n- Monthly spendings: ₹${spent.toLocaleString()}`;
 
-  const handleBackupFreqChange = (freq: any) => {
-    onUpdateSettings({
-      ...settings,
-      backupFrequency: freq
-    });
-  };
-
-  // Change notification alarm limit percentage (e.g., 80% default threshold)
-  const handleThresholdPercentageChange = (percentage: number) => {
-    onUpdateSettings({
-      ...settings,
-      alertThresholdPercentage: percentage
-    });
-    onTriggerNotification(
-      'Default Threshold Updated',
-      `Default fallback warning threshold set to ${percentage}%.`
-    );
-  };
-
-  const handleCategoryThresholdChange = (catName: string, percentage: number) => {
-    const currentThresholds = settings.categoryThresholds || {};
-    onUpdateSettings({
-      ...settings,
-      categoryThresholds: {
-        ...currentThresholds,
-        [catName]: percentage
+      if (navigator.share) {
+        navigator
+          .share({
+            title: "Rupee Wallet Statement",
+            text: summaryText,
+          })
+          .catch(() => {});
+      } else {
+        navigator.clipboard.writeText(summaryText);
+        onTriggerNotification(
+          "✓ Share Prepared",
+          "Statement overview summary copied to clipboard!",
+        );
       }
-    });
-    onTriggerNotification(
-      'Category Threshold Updated',
-      `Category "${catName}" warning limit configured to ${percentage}%.`
-    );
+    } catch (e) {
+      console.error(e);
+    }
   };
 
-  const handleOverallThresholdChange = (percentage: number) => {
-    onUpdateSettings({
-      ...settings,
-      overallThresholdPercentage: percentage
-    });
-    onTriggerNotification(
-      'Overall Threshold Updated',
-      `Overall total spending safety warning warning set to ${percentage}%.`
-    );
-  };
-
-  // PIN code config update including PIN memory hint!
+  // Safe PIN lock changes
   const handlePinUpdate = () => {
-    setPinError('');
+    setPinError("");
     setPinSuccess(false);
 
     if (oldPin !== settings.pin) {
-      setPinError('Existing PIN is incorrect.');
+      setPinError("Existing security PIN is incorrect");
       return;
     }
     if (newPin.length !== 4 || isNaN(Number(newPin))) {
-      setPinError('New PIN must be exactly 4 numeric digits.');
+      setPinError("New PIN must be 4 digits numeric");
       return;
     }
     if (newPin !== confirmPin) {
-      setPinError('New PIN confirmations do not match.');
+      setPinError("Confirmation code does not match");
       return;
     }
 
     onUpdateSettings({
       ...settings,
       pin: newPin,
-      pinHint: customPinHint || 'Self reminder',
-      isPinSet: true
+      pinHint: customPinHint || "Ascending sequence digits",
+      isPinSet: true,
     });
-    
     setPinSuccess(true);
-    setOldPin('');
-    setNewPin('');
-    setConfirmPin('');
+    setOldPin("");
+    setNewPin("");
+    setConfirmPin("");
+    onTriggerNotification(
+      "PIN Updated",
+      "Your device terminal entry block PIN security has been successfully modified.",
+    );
     setTimeout(() => {
       setPinChangeOpen(false);
       setPinSuccess(false);
     }, 2000);
-
-    onTriggerNotification(
-      'Encryption PIN Saved',
-      'Database access lock PIN and custom memory hint successfully updated.'
-    );
   };
 
-  // Handle addition of a completely custom category dynamic block
-  const handleCreateNewCategory = () => {
-    setAddCatError('');
-    setAddCatSuccess(false);
-
-    if (!newCatName.trim()) {
-      setAddCatError('Category label cannot be empty.');
-      return;
-    }
-
-    const catNameLower = newCatName.trim().toLowerCase();
-    const isDuplicate = categories.some(c => c.name.toLowerCase() === catNameLower);
-    if (isDuplicate) {
-      setAddCatError('Category with this name already exists.');
-      return;
-    }
-
-    const budgetVal = Number(newCatBudget);
-    if (isNaN(budgetVal) || budgetVal <= 0) {
-      setAddCatError('Budget amount must be a positive integer.');
-      return;
-    }
-
-    // Process comma separated subcategories
-    const parsedSubs = newCatSubcategories
-      .split(',')
-      .map(s => s.trim())
-      .filter(s => s.length > 0);
-
-    if (parsedSubs.length === 0) {
-      // provide default one if user left blank
-      parsedSubs.push('General');
-    }
-
-    // New values
-    const newCatId = `cat_${Date.now()}`;
-    const newCategoryItem: VirtualCategory = {
-      id: newCatId,
-      name: newCatName.trim(),
-      subcategories: parsedSubs
-    };
-
-    const newBudgetItem: VirtualBudget = {
-      categoryName: newCatName.trim(),
-      limitAmount: budgetVal
-    };
-
-    onUpdateCategories([...categories, newCategoryItem]);
-    onUpdateBudgets([...budgets, newBudgetItem]);
-
-    setAddCatSuccess(true);
-    setNewCatName('');
-    setNewCatBudget('5000');
-    setNewCatSubcategories('');
-    
+  // Wipe Simulated Database
+  const handleWipeDatabase = () => {
+    DbSim.resetToDefault();
     onTriggerNotification(
-      'Custom Category Configured',
-      `Successfully registered "${newCategoryItem.name}" with a monthly budget limit of ₹${budgetVal.toLocaleString()}`
+      "Database Reset",
+      "Simulated system database initialized to original defaults.",
     );
-
     setTimeout(() => {
-      setAddCatOpen(false);
-      setAddCatSuccess(false);
-    }, 2000);
-  };
-
-  // Append a subcategory tag to an existing category
-  const handleAddSubcategory = (catId: string, catName: string) => {
-    const inputVal = newSubcategoryInputs[catId];
-    if (!inputVal || !inputVal.trim()) return;
-
-    const updatedCategories = categories.map(cat => {
-      if (cat.id === catId) {
-        // avoid duplicates
-        const norm = inputVal.trim();
-        if (cat.subcategories.includes(norm)) return cat;
-        return {
-          ...cat,
-          subcategories: [...cat.subcategories, norm]
-        };
-      }
-      return cat;
-    });
-
-    onUpdateCategories(updatedCategories);
-    
-    // Clear subcategory input
-    setNewSubcategoryInputs(prev => ({
-      ...prev,
-      [catId]: ''
-    }));
-
-    onTriggerNotification(
-      'Subcategory Added',
-      `New subcategory "${inputVal.trim()}" registered under ${catName}.`
-    );
-  };
-
-  // Delete a subcategory tag
-  const handleDeleteSubcategory = (catId: string, subName: string, catName: string) => {
-    const updatedCategories = categories.map(cat => {
-      if (cat.id === catId) {
-        return {
-          ...cat,
-          subcategories: cat.subcategories.filter(s => s !== subName)
-        };
-      }
-      return cat;
-    });
-
-    onUpdateCategories(updatedCategories);
-
-    onTriggerNotification(
-      'Subcategory Deleted',
-      `Removed "${subName}" subcategory tag from ${catName}.`
-    );
-  };
-
-  // Delete an entire category from database schema
-  const handleDeleteEntireCategory = (catId: string, catName: string) => {
-    if (confirm(`Are you sure you want to delete category "${catName}"? This will permanently remove its budget limit config as well.`)) {
-      const updatedCategories = categories.filter(c => c.id !== catId);
-      onUpdateCategories(updatedCategories);
-
-      // Also clean up associated budget limits
-      const updatedBudgets = budgets.filter(b => b.categoryName.toLowerCase() !== catName.toLowerCase());
-      onUpdateBudgets(updatedBudgets);
-
-      onTriggerNotification(
-        'Category Deleted',
-        `Successfully deleted category "${catName}" and budget limits.`
-      );
-    }
-  };
-
-  // Modify Category's Budget Amount
-  const handleSaveBudgetLimit = (categoryName: string) => {
-    const stringVal = tempBudgetLimits[categoryName];
-    if (!stringVal) return;
-
-    const amount = Number(stringVal);
-    if (isNaN(amount) || amount <= 0) {
-      alert('Please specify a positive integer amount.');
-      return;
-    }
-
-    const exists = budgets.some(b => b.categoryName === categoryName);
-    let updatedBudgets: VirtualBudget[];
-    if (exists) {
-      updatedBudgets = budgets.map(b => b.categoryName === categoryName ? { ...b, limitAmount: amount } : b);
-    } else {
-      updatedBudgets = [...budgets, { categoryName, limitAmount: amount }];
-    }
-
-    onUpdateBudgets(updatedBudgets);
-    alert(`Monthly budget limit for ${categoryName} set to: ₹${amount.toLocaleString()}`);
-
-    onTriggerNotification(
-      'Budget Limit Adjusted',
-      `Monthly limit for ${categoryName} updated to ₹${amount.toLocaleString()}`
-    );
-  };
-
-  // Smart check to see if an expense date string matches a custom user timeframe query unit
-  const matchesPeriodQuery = (dateStr: string, q: string) => {
-    const cleanDate = dateStr.toLowerCase();
-    const cleanQ = q.toLowerCase().trim().replace(/ /g, '').replace(/,/g, '');
-    
-    if (cleanQ === 'all' || cleanQ === 'lifetime') return true;
-    
-    // Check if ISO format '2026-06' or similar
-    if (cleanQ.includes('-')) {
-      return cleanDate.startsWith(cleanQ);
-    }
-    
-    // Check if simple year '2026' or '2025' or '2024'
-    if (cleanQ === '2026' || cleanQ === '2025' || cleanQ === '2024') {
-      return cleanDate.startsWith(cleanQ);
-    }
-
-    // Support month names: "june2026", "june26", "june", "june25", etc.
-    const monthMap: Record<string, string> = {
-      jan: '01', feb: '02', mar: '03', apr: '04', may: '05', jun: '06',
-      jul: '07', aug: '08', sep: '09', oct: '10', nov: '11', dec: '12',
-      january: '01', february: '02', 'mar.': '03', march: '03', april: '04', june: '06',
-      july: '07', august: '08', september: '09', october: '10', november: '11', december: '12'
-    };
-
-    // Parse month and year from common human input e.g. "june26" or "mar26"
-    for (const [mName, mId] of Object.entries(monthMap)) {
-      if (cleanQ.startsWith(mName)) {
-        const remainingYear = cleanQ.replace(mName, ''); // might be "26" or "2026"
-        if (remainingYear === '26' || remainingYear === '2026') {
-          return cleanDate.startsWith(`2026-${mId}`);
-        }
-        if (remainingYear === '25' || remainingYear === '2025') {
-          return cleanDate.startsWith(`2025-${mId}`);
-        }
-        if (remainingYear === '24' || remainingYear === '2024') {
-          return cleanDate.startsWith(`2024-${mId}`);
-        }
-        // Fallback to match month part inside the current 2026 scope context
-        return cleanDate.startsWith(`2026-${mId}`);
-      }
-    }
-
-    return cleanDate.includes(cleanQ);
-  };
-
-  // Statement Exporter logic based on multiple, comma separated timeframe queries
-  const handleGenerateStatement = () => {
-    const queryPeriods = periodInputVal.split(',').map(s => s.trim()).filter(Boolean);
-    if (queryPeriods.length === 0) {
-      alert("Please enter or click at least one timeframe period first.");
-      return;
-    }
-
-    // Filter transaction logs combined over active query elements
-    const filteredExpenses = expenses.filter(exp => {
-      return queryPeriods.some(q => matchesPeriodQuery(exp.date, q));
-    });
-
-    const combinedLabel = queryPeriods.join(', ');
-
-    if (filteredExpenses.length === 0) {
-      alert(`No offline transaction entries matching query period(s): "${periodInputVal}"`);
-      return;
-    }
-
-    // 2. Generate export formats
-    if (reportFormat === 'excel') {
-      const csvContent = "data:text/csv;charset=utf-8," 
-        + `Period,${periodInputVal} expense tracker report statement\n`
-        + "Date,Category,Subcategory,Amount (INR),Payment Mode,Notes\n"
-        + filteredExpenses.map(e => `"${e.date}","${e.category}","${e.subcategory}","${e.amount}","${e.paymentMode}","${e.notes}"`).join("\n");
-      
-      const encodedUri = encodeURI(csvContent);
-      const link = document.createElement("a");
-      link.setAttribute("href", encodedUri);
-      link.setAttribute("download", `Statement_${periodInputVal.replace(/ /g, '_').replace(/,/g, '_')}_Offline.csv`);
-      document.body.appendChild(link);
-      link.click();
-      document.body.removeChild(link);
-      
-      onTriggerNotification(
-        'Spreadsheet Downloaded',
-        `Successfully exported CSV ledger sheet for "${periodInputVal}" (${filteredExpenses.length} records).`
-      );
-    } else {
-      // PDF Web View document generation
-      const reportWindow = window.open("", "_blank");
-      if (reportWindow) {
-        const categoriesSummary = categories.map(c => {
-          const sum = filteredExpenses
-            .filter(e => e.category.toLowerCase() === c.name.toLowerCase())
-            .reduce((sum, e) => sum + e.amount, 0);
-          return { name: c.name, sum };
-        }).filter(c => c.sum > 0);
-
-        const totalExpenditure = categoriesSummary.reduce((sum, c) => sum + c.sum, 0);
-
-        reportWindow.document.write(`
-          <html>
-            <head>
-              <title>Export Statement - ${periodInputVal}</title>
-              <style>
-                body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; padding: 35px; color: #1e293b; background: #ffffff; }
-                h1 { border-bottom: 3px solid #4f46e5; padding-bottom: 8px; color: #312e81; font-size: 1.8rem; margin-bottom: 10px;}
-                .meta-summary { font-size: 0.9rem; color: #64748b; margin-bottom: 25px; }
-                .metric-card { background: #f0fdf4; padding: 20px; border-radius: 12px; font-weight: bold; font-size: 1.4rem; border-left: 6px solid #16a34a; margin-bottom: 25px; color: #15803d; }
-                table { width: 100%; border-collapse: collapse; margin-top: 20px; margin-bottom: 30px; }
-                th { background: #334155; color: white; padding: 10px; text-align: left; font-size: 0.85rem; text-transform: uppercase; }
-                td { padding: 11px; border-bottom: 1px solid #e2e8f0; font-size: 0.85rem; }
-                .text-right { text-align: right; }
-                .print-footer { margin-top: 50px; font-size: 10px; color: #94a3b8; text-align: center; border-t: 1px solid #f1f5f9; padding-t: 15px; }
-              </style>
-            </head>
-            <body>
-              <h1>Expense Tracker Statement</h1>
-              <p class="meta-summary">Selected Timeframe: <strong>${periodInputVal}</strong> &middot; Generated on: ${new Date().toLocaleDateString()}</p>
-              
-              <div class="metric-card">
-                Total expenditure recorded: INR ${totalExpenditure.toLocaleString()}
-              </div>
-
-              <h3>1. CATEGORY CLUSTER ALLOCATIONS</h3>
-              <table>
-                <thead>
-                  <tr>
-                    <th>Category Name</th>
-                    <th class="text-right">Total Spent (INR)</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  ${categoriesSummary.map(c => `
-                    <tr>
-                      <td><strong>${c.name}</strong></td>
-                      <td class="text-right">₹${c.sum.toLocaleString()}</td>
-                    </tr>
-                  `).join('')}
-                </tbody>
-              </table>
-
-              <h3>2. DYNAMIC TRANSACTIONS LOGS (${filteredExpenses.length} Entries)</h3>
-              <table>
-                <thead>
-                  <tr>
-                    <th>Date</th>
-                    <th>Category</th>
-                    <th>Subcategory</th>
-                    <th>Payment Mode</th>
-                    <th>Notes</th>
-                    <th class="text-right">Sum (INR)</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  ${filteredExpenses.map(e => `
-                    <tr>
-                      <td>${e.date}</td>
-                      <td>${e.category}</td>
-                      <td>${e.subcategory}</td>
-                      <td>${e.paymentMode}</td>
-                      <td><i>${e.notes || '-'}</i></td>
-                      <td class="text-right">₹${e.amount.toLocaleString()}</td>
-                    </tr>
-                  `).join('')}
-                </tbody>
-              </table>
-              <div class="print-footer">
-                <p>Generated by Expense Tracker Engine. Secure Single User Offline Backup.</p>
-              </div>
-              <script>
-                setTimeout(function() {
-                  window.print();
-                }, 500);
-              </script>
-            </body>
-          </html>
-        `);
-        reportWindow.document.close();
-      }
-
-      onTriggerNotification(
-        'Statement Launched',
-        `Ready-to-print multi-month PDF document generated for ${periodInputVal}.`
-      );
-    }
-  };
-
-  const handleOpenShareSheet = () => {
-    const queryPeriods = periodInputVal.split(',').map(s => s.trim()).filter(Boolean);
-    if (queryPeriods.length === 0) {
-      alert("Please specify or click at least one period timeframe before sharing.");
-      return;
-    }
-
-    const filteredExpenses = expenses.filter(exp => {
-      return queryPeriods.some(q => matchesPeriodQuery(exp.date, q));
-    });
-
-    if (filteredExpenses.length === 0) {
-      alert(`No matching transactions found for: "${periodInputVal}" to package for sharing.`);
-      return;
-    }
-
-    setShareSheetOpen(true);
-  };
-
-  const handleAppShareClick = (appName: string) => {
-    const queryPeriods = periodInputVal.split(',').map(s => s.trim()).filter(Boolean);
-    const combinedLabel = queryPeriods.join(', ');
-    const filteredExpenses = expenses.filter(exp => {
-      return queryPeriods.some(q => matchesPeriodQuery(exp.date, q));
-    });
-    const totalSpent = filteredExpenses.reduce((sum, e) => sum + e.amount, 0);
-
-    onTriggerNotification(
-      'Statement Shared',
-      `Delivered "${combinedLabel}" report format via ${appName} successfully.`
-    );
-    alert(`Shared! Successfully dispatched ${reportFormat.toUpperCase()} report of "${combinedLabel}" (Total: ₹${totalSpent.toLocaleString()}) via simulated native ${appName} share sheet!`);
-    setShareSheetOpen(false);
-  };
-
-  // Google Drive Simulation authentication flow
-  const handleOpenGoogleAuth = () => {
-    setGoogleAuthStep('choose');
-    setGoogleSelectedEmail(settings.googleDriveConnected ? (settings.googleDriveEmail || 'deepakrajgir43@gmail.com') : 'deepakrajgir43@gmail.com');
-    setGoogleCustomEmailInput('');
-    setGoogleAgreedScopes(false);
-    setGoogleAuthProgress(0);
-    setGoogleAuthLog('Initiating secure OAuth handshake request...');
-    setGoogleAuthOpen(true);
-  };
-
-  const handleStartGoogleAuthFlow = (targetEmail: string) => {
-    // Validate custom email if that's what was chosen
-    if (targetEmail === 'custom') {
-      const email = googleCustomEmailInput.trim();
-      if (!email || !email.includes('@') || !email.includes('.')) {
-        alert('Please enter a valid Gmail or Google Workspace email address!');
-        return;
-      }
-      targetEmail = email;
-    }
-    
-    setGoogleSelectedEmail(targetEmail);
-    // Proceed to consent step
-    setGoogleAuthStep('consent');
-  };
-
-  const handleLaunchAuthorizationHandshake = () => {
-    if (!googleAgreedScopes) {
-      alert('You must check the agreement box to grant the requested authorizations.');
-      return;
-    }
-
-    setGoogleAuthStep('authorizing');
-    setGoogleAuthProgress(10);
-    setGoogleAuthLog('Contacting Google Authorization Servers (accounts.google.com)...');
-
-    // Interval to simulate handshake progression
-    let currentProgress = 10;
-    const interval = setInterval(() => {
-      currentProgress += 15;
-      if (currentProgress >= 100) {
-        currentProgress = 100;
-        clearInterval(interval);
-        
-        // Finalize state save
-        onUpdateSettings({
-          ...settings,
-          googleDriveConnected: true,
-          googleDriveEmail: googleSelectedEmail
-        });
-
-        setGoogleAuthStep('success');
-        onTriggerNotification(
-          'Google Account Connected',
-          `Successfully authenticated & linked Google Drive to: ${googleSelectedEmail}`
-        );
-      } else {
-        setGoogleAuthProgress(currentProgress);
-        // Change logs dynamically
-        if (currentProgress < 40) {
-          setGoogleAuthLog('Validating client application authentication IDs...');
-        } else if (currentProgress < 65) {
-          setGoogleAuthLog('Handshaking keys with OAuth Exchange gateway...');
-        } else if (currentProgress < 85) {
-          setGoogleAuthLog('Creating sandbox database appDataFolder partition inside Google Drive...');
-        } else {
-          setGoogleAuthLog('Issuing secure, encrypted sync access token keys...');
-        }
-      }
-    }, 400);
-  };
-
-  const handleDisconnectGoogleDrive = () => {
-    if (confirm('Are you sure you want to disconnect this Google Drive account? Automatic cloud uploads will be paused, but existing backups inside your Drive won\'t be affected.')) {
-      onUpdateSettings({
-        ...settings,
-        googleDriveConnected: false,
-        googleDriveEmail: null
-      });
-      onTriggerNotification(
-        'Cloud Account Disconnected',
-        'Your Google Drive connection was successfully unlinked.'
-      );
-    }
-  };
-
-  // Google Drive Simulation sync
-  const handleGoogleDriveBackupSync = () => {
-    const activeEmail = settings.googleDriveConnected ? (settings.googleDriveEmail || 'your.account@gmail.com') : null;
-    if (!activeEmail) {
-      alert('Your Google Drive is disconnected. Let\'s link your unique Google account first!');
-      handleOpenGoogleAuth();
-      return;
-    }
-
-    setSyncing(true);
-    setSyncStatus(`Handshaking securely with Google Cloud Drive account: ${activeEmail}...`);
-    
-    setTimeout(() => {
-      setSyncStatus(`[${activeEmail}] Packaging offline database entries...`);
-      setTimeout(() => {
-        setSyncStatus(`[${activeEmail}] Uploading cloud SQLite JSON backup blobs...`);
-        setTimeout(() => {
-          setSyncing(false);
-          setSyncStatus(null);
-          const nowStr = new Date().toISOString().replace('T', ' ').substring(0, 19);
-          onUpdateSettings({
-            ...settings,
-            lastBackupDate: nowStr
-          });
-          onTriggerNotification(
-            'Google Drive Backup Successful',
-            `Full database backup successfully uploaded under unique user account: ${activeEmail}`
-          );
-          alert(`Success! Successfully uploaded SQL backup schema to Google Drive folder for unique account: ${activeEmail}`);
-        }, 1200);
-      }, 1000);
+      window.location.reload();
     }, 1000);
   };
 
+  // JSON Ingress/Egress Backups
   const handleDownloadBackupFile = () => {
-    const backupJson = DbSim.generateBackupData();
-    const blob = new Blob([backupJson], { type: 'application/json' });
+    const rawData = DbSim.generateBackupData();
+    const blob = new Blob([rawData], { type: "application/json" });
     const url = URL.createObjectURL(blob);
-    const link = document.createElement('a');
+    const link = document.createElement("a");
     link.href = url;
-    link.download = `expense_tracker_backup_${new Date().toISOString().substring(0, 10)}.db.json`;
+    link.download = `rupee_app_database_dump_${Date.now()}.json`;
+    document.body.appendChild(link);
     link.click();
+    document.body.removeChild(link);
     URL.revokeObjectURL(url);
-    
     onTriggerNotification(
-      'Backup Export Complete',
-      'JSON raw backup payload successfully downloaded.'
+      "JSON Exported",
+      "A clean system fallback backup file downloaded successfully.",
     );
   };
 
-  const handleImportBackupFile = (event: React.ChangeEvent<HTMLInputElement>) => {
-    const files = event.target.files;
-    if (!files || files.length === 0) return;
+  const handleImportBackupFile = (evt: React.ChangeEvent<HTMLInputElement>) => {
+    const file = evt.target.files?.[0];
+    if (!file) return;
 
-    const file = files[0];
     const reader = new FileReader();
     reader.onload = (e) => {
       const content = e.target?.result as string;
       const success = DbSim.restoreBackupData(content);
       if (success) {
-        onRestore();
-        onTriggerNotification(
-          'Database Synchronized',
-          'Reloaded raw transactions, budgets limits, and custom tags.'
+        alert(
+          "All master database payload elements loaded from fallback. App is rebooting...",
         );
+        window.location.reload();
       } else {
-        alert('Format error: Not a valid SQLite JSON backup.');
+        alert("Malformed database backup JSON file.");
       }
     };
     reader.readAsText(file);
   };
 
-  const handleWipeDatabase = () => {
-    if (confirm('Are you absolutely sure you want to revert database? All transactions, budgets, custom category blocks will be permanently wiped.')) {
-      DbSim.resetToDefault();
-      onRestore();
+  // Google Drive Simulation Backup
+  const handleBackupToDrive = () => {
+    try {
+      const rawData = DbSim.generateBackupData();
+      localStorage.setItem("rupee_app_drive_backup_ledgers", rawData);
       onTriggerNotification(
-        'Database Hard Reset',
-        'Simulated database restored to default sandbox state.'
+        "Drive Synced ✓",
+        "Successfully synchronized and backed up SQLite database ledger to Google Drive ledger cloud.",
       );
-;
+    } catch (err) {
+      onTriggerNotification(
+        "Backup Failed",
+        "Google Drive cloud backup failed.",
+      );
+    }
+  };
+
+  const handleRestoreFromDrive = () => {
+    const backupData = localStorage.getItem("rupee_app_drive_backup_ledgers");
+    if (!backupData) {
+      alert(
+        "No Google Drive backup ledger found. Please create a backup to Drive first!",
+      );
+      return;
+    }
+    const success = DbSim.restoreBackupData(backupData);
+    if (success) {
+      onTriggerNotification(
+        "Drive Restored ✓",
+        "Successfully restored SQLite database entries from Google Drive cloud.",
+      );
+      setTimeout(() => {
+        alert(
+          "All master database elements loaded from Google Drive. App is rebooting...",
+        );
+        window.location.reload();
+      }, 500);
+    } else {
+      alert("Corrupt or invalid backup payload detected in cloud.");
     }
   };
 
   return (
-    <div className="flex-1 overflow-y-auto bg-slate-50 dark:bg-slate-900 px-4 py-4 space-y-4 scrollbar-thin">
-      
-      {/* 1. Category & Subcategory Master Configurator Panel */}
-      <div className="bg-white dark:bg-slate-800 p-4 rounded-xl border border-slate-100 dark:border-slate-800 shadow-sm space-y-3.5">
-        <div className="flex items-center justify-between pb-1.5 border-b border-slate-100 dark:border-slate-700/60">
-          <h3 className="text-xs font-black uppercase text-slate-400 tracking-wider flex items-center gap-1.5 font-mono">
-            <FolderPlus className="h-4 w-4 text-emerald-500" />
-            🏷️ Category & Budget Control
-          </h3>
-          <button
-            onClick={() => setAddCatOpen(!addCatOpen)}
-            className="text-[11px] bg-indigo-50 hover:bg-indigo-100 dark:bg-indigo-950/55 dark:hover:bg-indigo-900/60 text-indigo-600 dark:text-indigo-400 px-2 py-1 rounded-lg font-bold flex items-center gap-0.5 transition-colors cursor-pointer"
-          >
-            {addCatOpen ? <X className="h-3 w-3" /> : <Plus className="h-3 w-3" />}
-            {addCatOpen ? 'Cancel' : 'Add Category'}
-          </button>
-        </div>
+    <div className="flex-1 overflow-y-auto overflow-x-hidden w-full max-w-full bg-slate-50 dark:bg-slate-900 px-4 py-4 space-y-2 scrollbar-none font-sans relative text-xs text-slate-700">
+      {/* Dynamic Header */}
+      <div className="flex items-center gap-1.5 border-b border-indigo-950/20 pb-2">
+        <Settings className="h-4 w-4 text-[#4f46e5] dark:text-indigo-400" />
+        <span className="text-[10px] text-slate-400 font-extrabold uppercase tracking-widest font-mono">
+          SYSTEM CONFIGURATION PANEL
+        </span>
+      </div>
 
-        {/* 1A. Form to Add a Dynamic Category with initial budget & subcategories */}
-        {addCatOpen && (
-          <div className="bg-slate-50 dark:bg-slate-900/50 p-3 rounded-xl border border-slate-150 dark:border-slate-800/80 space-y-2.5">
-            <h4 className="text-[11px] font-black uppercase text-slate-600 dark:text-slate-350">Create New Database Category</h4>
-            
-            <div className="grid grid-cols-2 gap-2">
-              <div>
-                <label className="text-[9px] text-slate-400 font-bold uppercase">Category Title</label>
-                <input
-                  type="text"
-                  placeholder="e.g. Health"
-                  value={newCatName}
-                  onChange={(e) => setNewCatName(e.target.value)}
-                  className="bg-white dark:bg-slate-800 p-2 text-xs rounded-lg w-full mt-0.5 text-slate-800 dark:text-slate-100 border border-slate-100 dark:border-slate-700 outline-none"
-                />
-              </div>
-              <div>
-                <label className="text-[9px] text-slate-400 font-bold uppercase">Budget Limit (₹)</label>
-                <input
-                  type="number"
-                  placeholder="e.g. 5000"
-                  value={newCatBudget}
-                  onChange={(e) => setNewCatBudget(e.target.value)}
-                  className="bg-white dark:bg-slate-800 p-2 text-xs rounded-lg w-full mt-0.5 text-slate-800 dark:text-slate-100 border border-slate-100 dark:border-slate-700 outline-none"
-                />
-              </div>
-            </div>
-
-            <div>
-              <label className="text-[9px] text-slate-400 font-bold uppercase">Subcategories (Comma separated tags)</label>
-              <input
-                type="text"
-                placeholder="Medicine, Dentist, Checkups"
-                value={newCatSubcategories}
-                onChange={(e) => setNewCatSubcategories(e.target.value)}
-                className="bg-white dark:bg-slate-800 p-2 text-xs rounded-lg w-full mt-0.5 text-slate-800 dark:text-slate-100 border border-slate-105 dark:border-slate-700 outline-none placeholder:text-slate-400"
-              />
-            </div>
-
-            {addCatError && <p className="text-red-500 text-[10px] font-bold text-center mt-1">{addCatError}</p>}
-            {addCatSuccess && <p className="text-emerald-500 text-[10px] font-bold text-center mt-1 flex items-center justify-center gap-0.5"><CheckCircle className="h-3 w-3" /> Created successfully!</p>}
-
-            <button
-              onClick={handleCreateNewCategory}
-              className="py-1.5 bg-indigo-600 hover:bg-indigo-700 active:scale-95 text-white rounded-lg text-xs font-bold w-full mt-1 cursor-pointer transition-colors"
-            >
-              Add to Database
-            </button>
-          </div>
-        )}
-
-        {/* 1B. Alert Percentage Selector Threshold (Overall Budget combined limit monitor) */}
-        <div className="bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 p-3 rounded-xl">
-          {/* Slider 2: Combined Overall Budget Threshold */}
-          <div className="space-y-1.5 font-mono">
-            <div className="flex justify-between items-center text-[10px] leading-none">
-              <span className="text-emerald-600 dark:text-emerald-400 uppercase font-black tracking-wider flex items-center gap-1">
-                <Sliders className="h-3.5 w-3.5" />
-                Overall Total Budget Warning Limit
-              </span>
-              <span className="text-emerald-600 dark:text-emerald-400 font-bold text-xs bg-emerald-50 dark:bg-emerald-950 px-1.5 py-0.5 rounded border border-emerald-500/20">
-                {settings.overallThresholdPercentage ?? 80}%
-              </span>
-            </div>
-            <p className="text-[9px] text-slate-400 dark:text-slate-500 leading-normal font-sans pt-1">
-              Warning triggered as soon as overall combined month spendings cross this percentage of total budgets (default: 80%).
-            </p>
-            <div className="flex items-center gap-2 pt-1 font-semibold">
-              <input
-                type="range"
-                min="50"
-                max="100"
-                step="5"
-                value={settings.overallThresholdPercentage ?? 80}
-                onChange={(e) => handleOverallThresholdChange(Number(e.target.value))}
-                className="w-full h-2 bg-slate-200 dark:bg-slate-700 rounded-lg cursor-pointer accent-emerald-600"
-              />
-            </div>
-          </div>
-        </div>
-
-        {/* 1C. Editable List of Database Categories */}
-        <div className="space-y-2 border-t border-slate-100 dark:border-slate-800 pt-3">
-          <div className="flex items-center justify-between">
-            <label className="text-[10px] text-slate-500 dark:text-slate-400 font-black uppercase font-mono block">
-              Category Schema & Budgets
-            </label>
-            <button
-              onClick={() => setShowCategoriesList(!showCategoriesList)}
-              type="button"
-              className="text-[10px] bg-slate-100 hover:bg-slate-200 dark:bg-slate-900 dark:hover:bg-slate-805 text-indigo-600 dark:text-indigo-400 px-2.5 py-1 rounded font-bold font-mono transition-all cursor-pointer border border-slate-200/50 dark:border-slate-850"
-            >
-              {showCategoriesList ? 'Collapse' : 'View'}
-            </button>
-          </div>
-
-          {showCategoriesList && (
-            <div className="space-y-2">
-              {categories.map(cat => {
-                const isExpanded = expandedCategoryId === cat.id;
-                const budgetLine = budgets.find(b => b.categoryName.toLowerCase() === cat.name.toLowerCase());
-                const initialBudgetStr = budgetLine ? String(budgetLine.limitAmount) : '';
-                const currentBudgetLimitVal = tempBudgetLimits[cat.name] !== undefined ? tempBudgetLimits[cat.name] : initialBudgetStr;
-
-                return (
-                  <div key={cat.id} className="border border-slate-100 dark:border-slate-800 rounded-xl overflow-hidden">
-                    <button
-                      onClick={() => setExpandedCategoryId(isExpanded ? null : cat.id)}
-                      className="w-full px-3 py-2.5 bg-slate-50 dark:bg-slate-850 hover:bg-slate-100/75 dark:hover:bg-slate-800/80 flex items-center justify-between text-left transition-colors cursor-pointer"
-                    >
-                      <div className="space-y-0.5">
-                        <span className="text-xs font-black text-slate-700 dark:text-slate-200 font-mono uppercase">{cat.name}</span>
-                        <p className="text-[9px] text-slate-400 font-bold uppercase font-mono">
-                          Monthly Limit: <span className="text-emerald-500">₹{(budgetLine?.limitAmount ?? 0).toLocaleString()}</span>
-                        </p>
-                      </div>
-                      <span className="text-[9.5px] font-bold text-indigo-500 flex items-center gap-0.5 font-mono">
-                        {isExpanded ? 'Collapse config' : 'Edit sub/limit'}
-                      </span>
-                    </button>
-
-                    {isExpanded && (
-                      <div className="p-3 bg-white dark:bg-slate-800 border-t border-slate-100 dark:border-slate-800 space-y-3">
-                        
-                        {/* Budget limit editor */}
-                        <div className="flex items-end gap-2 bg-slate-50 dark:bg-slate-900/50 p-2 rounded-xl">
-                          <div className="flex-1">
-                            <label className="text-[8.5px] text-slate-400 font-black uppercase font-mono block mb-0.5">Category Monthly Budget Limit (₹)</label>
-                            <input
-                              type="number"
-                              placeholder="e.g. 10000"
-                              value={currentBudgetLimitVal}
-                              onChange={(e) => setTempBudgetLimits({ ...tempBudgetLimits, [cat.name]: e.target.value })}
-                              className="bg-white dark:bg-slate-800 px-2 py-1 text-xs rounded border border-slate-200 dark:border-slate-700 w-full text-slate-800 dark:text-slate-100 font-mono outline-none"
-                            />
-                          </div>
-                          <button
-                            onClick={() => handleSaveBudgetLimit(cat.name)}
-                            className="px-2.5 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded text-[10px] font-bold font-mono cursor-pointer transition-colors"
-                          >
-                            Adjust Limit
-                          </button>
-                        </div>
-
-                        {/* Category Specific Warning Limit Slider */}
-                        <div className="bg-indigo-50/40 dark:bg-slate-900 p-2.5 rounded-xl space-y-1">
-                          <div className="flex justify-between items-center text-[9px] font-mono leading-none">
-                            <span className="text-indigo-600 dark:text-indigo-400 uppercase font-black">
-                              ⚠️ Custom alert warn limit
-                            </span>
-                            <span className="text-indigo-600 dark:text-indigo-400 font-bold bg-white dark:bg-slate-800 px-1 py-0.5 rounded border border-indigo-100 dark:border-slate-700">
-                              {settings.categoryThresholds?.[cat.name] ?? 80}%
-                            </span>
-                          </div>
-                          <input
-                            type="range"
-                            min="50"
-                            max="100"
-                            step="5"
-                            value={settings.categoryThresholds?.[cat.name] ?? 80}
-                            onChange={(e) => handleCategoryThresholdChange(cat.name, Number(e.target.value))}
-                            className="w-full h-2 bg-slate-250 dark:bg-slate-700 rounded-lg cursor-pointer accent-indigo-600 my-1"
-                          />
-                          <span className="text-[8px] text-slate-400 block leading-tight">
-                            Adjust when color-coding limits warn for {cat.name} (fallback: 80%).
-                          </span>
-                        </div>
-
-                        {/* Subcategories tag lists */}
-                        <div className="space-y-1">
-                          <label className="text-[8.5px] text-slate-400 font-black uppercase font-mono block">Active Subcategories Tag lists</label>
-                          <div className="flex flex-wrap gap-1 mt-1">
-                            {cat.subcategories.map(sub => (
-                              <span
-                                key={sub}
-                                className="inline-flex items-center gap-1 bg-slate-50 dark:bg-slate-900 text-slate-600 dark:text-slate-300 px-2 py-0.5 rounded text-[10px] font-medium border border-slate-150 dark:border-slate-800"
-                              >
-                                <span>{sub}</span>
-                                <button
-                                  onClick={() => handleDeleteSubcategory(cat.id, sub, cat.name)}
-                                  className="text-red-400 hover:text-red-500 text-[10px] font-bold cursor-pointer"
-                                  title="Delete subcategory cluster"
-                                >
-                                  <X className="h-2.5 w-2.5" />
-                                </button>
-                              </span>
-                            ))}
-                            {cat.subcategories.length === 0 && (
-                              <span className="text-[10px] text-slate-400 italic">No subcategories defined.</span>
-                            )}
-                          </div>
-                        </div>
-
-                        {/* Append new subcategory tag field */}
-                        <div className="flex items-center gap-1.5">
-                          <input
-                            type="text"
-                            placeholder="Add subcategory tag (e.g. Fast Food)"
-                            value={newSubcategoryInputs[cat.id] || ''}
-                            onChange={(e) => setNewSubcategoryInputs({ ...newSubcategoryInputs, [cat.id]: e.target.value })}
-                            className="bg-slate-50 dark:bg-slate-900 px-2 py-1 text-xs rounded border border-slate-100 dark:border-slate-805 flex-1 text-slate-800 dark:text-slate-200 outline-none"
-                            onKeyDown={(e) => {
-                              if (e.key === 'Enter') handleAddSubcategory(cat.id, cat.name);
-                            }}
-                          />
-                          <button
-                            onClick={() => handleAddSubcategory(cat.id, cat.name)}
-                            className="p-1 px-2.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded text-xs font-bold transition-all cursor-pointer flex items-center justify-center gap-0.5"
-                          >
-                            <Plus className="h-3 w-3" /> Tag
-                          </button>
-                        </div>
-
-                        {/* Delete Entire Category */}
-                        <div className="pt-2.5 border-t border-slate-100 dark:border-slate-850 flex justify-end">
-                          <button
-                            onClick={() => handleDeleteEntireCategory(cat.id, cat.name)}
-                            type="button"
-                            className="px-2.5 py-1 text-red-500 hover:text-red-650 bg-red-50 dark:bg-red-950/20 hover:bg-red-100/40 rounded text-[10px] font-bold font-mono transition-colors flex items-center gap-1 cursor-pointer"
-                          >
-                            <Trash2 className="h-3.5 w-3.5" /> Delete Category
-                          </button>
-                        </div>
-
-                      </div>
-                    )}
-                  </div>
-                );
-              })}
-            </div>
-          )}
+      {/* BLOCK 1: OVERALL TOTAL BUDGET WARNING LIMIT */}
+      <div className="bg-white dark:bg-slate-850 p-3.5 rounded-2xl border border-slate-100 dark:border-slate-800 shadow-sm space-y-2">
+        <h3 className="text-[10px] font-black uppercase text-slate-400 dark:text-slate-400 tracking-wider font-mono">
+          OVERALL TOTAL BUDGET WARNING LIMIT
+        </h3>
+        <div className="flex items-center gap-3">
+          <input
+            type="range"
+            min={40}
+            max={100}
+            step={5}
+            value={alertThreshold}
+            onChange={(e) => handleSaveThreshold(e.target.value)}
+            className="flex-1 accent-[#5B4CFF] cursor-pointer h-1.5 bg-slate-200 dark:bg-slate-800 rounded-lg"
+          />
+          <span className="bg-indigo-50 dark:bg-indigo-950/40 text-[#4f46e5] dark:text-indigo-300 font-extrabold font-mono text-[10px] px-2.5 py-1 rounded-full border border-indigo-100 dark:border-indigo-900/40 min-w-[45px] text-center">
+            {alertThreshold}%
+          </span>
         </div>
       </div>
 
-      {/* 2. Interactive Reports & Statement Exporter Center */}
-      <div className="bg-white dark:bg-slate-800 p-4 rounded-xl border border-slate-100 dark:border-slate-800 shadow-sm space-y-3.5">
-        <h3 className="text-xs font-black uppercase text-slate-400 tracking-wider flex items-center gap-1.5 font-mono">
-          <Calendar className="h-4 w-4 text-indigo-500" />
-          📊 Reports & Statement Exporter
+      {/* BLOCK 2: Category Master Section (Creation, Checking, Modifying Categories) */}
+      <div className="bg-white dark:bg-slate-850 p-4 rounded-2xl border border-slate-100 dark:border-slate-800 shadow-sm space-y-3.5">
+        {/* Collapsible Section Header */}
+        <div className="flex justify-between items-center border-b border-slate-100 dark:border-slate-800 pb-2">
+          <h3 className="text-[10px] font-black uppercase text-slate-400 dark:text-slate-400 tracking-wider font-mono flex items-center gap-1.5">
+            <FolderPlus className="h-3.5 w-3.5 text-[#4f46e5] dark:text-indigo-400" />{" "}
+            CATEGORY & BUDGET CONTROL
+          </h3>
+          <button
+            onClick={() => setIsCategoryListCollapsed(!isCategoryListCollapsed)}
+            className="px-2.5 py-1 bg-slate-50 dark:bg-slate-800 hover:bg-slate-100 dark:hover:bg-slate-755 text-[#4f46e5] dark:text-indigo-400 font-bold font-mono text-[9px] rounded-lg border border-slate-150 dark:border-slate-700 cursor-pointer transition-colors"
+          >
+            Modify Category
+          </button>
+        </div>
+
+        <AnimatePresence initial={false}>
+          {!isCategoryListCollapsed && (
+            <motion.div
+              initial={{ opacity: 0, height: 0 }}
+              animate={{ opacity: 1, height: "auto" }}
+              exit={{ opacity: 0, height: 0 }}
+              className="space-y-4 overflow-hidden"
+            >
+              {/* 2a. Category Creation Block */}
+              <div className="space-y-2 bg-slate-50 dark:bg-slate-900/60 p-3 rounded-xl border border-slate-150 dark:border-slate-800/80">
+                <h4 className="text-[9px] font-extrabold uppercase text-[#4f46e5] dark:text-indigo-400 tracking-wider font-mono">
+                  Create New Category
+                </h4>
+
+                <div className="grid grid-cols-2 gap-2">
+                  <div>
+                    <span className="text-[8.5px] text-slate-400 block font-bold font-mono uppercase">
+                      Category Name
+                    </span>
+                    <input
+                      type="text"
+                      placeholder="e.g. Subscriptions"
+                      value={newCatName}
+                      onChange={(e) => setNewCatName(e.target.value)}
+                      className="w-full bg-slate-900 p-2 rounded-lg border border-slate-700 outline-none font-bold text-xs text-white placeholder-slate-450 focus:border-indigo-500"
+                    />
+                  </div>
+                  <div>
+                    <span className="text-[8.5px] text-slate-400 block font-bold font-mono uppercase">
+                      Allocation Flow
+                    </span>
+                    <div className="grid grid-cols-2 gap-1 mt-0.5">
+                      <button
+                        onClick={() => setNewCatType("expense")}
+                        className={`py-1.5 rounded-lg text-[8.5px] font-bold uppercase font-mono border transition-all cursor-pointer ${
+                          newCatType === "expense"
+                            ? "bg-[#4f46e5] border-[#4f46e5] text-white"
+                            : "bg-white dark:bg-slate-800 text-slate-400 border-slate-200 dark:border-slate-750"
+                        }`}
+                      >
+                        Expense
+                      </button>
+                      <button
+                        onClick={() => setNewCatType("income")}
+                        className={`py-1.5 rounded-lg text-[8.5px] font-bold uppercase font-mono border transition-all cursor-pointer ${
+                          newCatType === "income"
+                            ? "bg-emerald-600 border-emerald-600 text-white"
+                            : "bg-white dark:bg-slate-800 text-slate-400 border-slate-200 dark:border-slate-750"
+                        }`}
+                      >
+                        Income
+                      </button>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-2 gap-2">
+                  <div>
+                    <span className="text-[8.5px] text-slate-400 block font-bold font-mono uppercase">
+                      Subcategory
+                    </span>
+                    <input
+                      type="text"
+                      placeholder="Netflix, Spotify, Prime"
+                      value={newCatSubcats}
+                      onChange={(e) => setNewCatSubcats(e.target.value)}
+                      className="w-full bg-slate-900 p-2 rounded-lg border border-slate-700 outline-none text-[10px] text-white placeholder-slate-450 focus:border-indigo-500"
+                    />
+                  </div>
+                  <div>
+                    <span className="text-[8.5px] text-slate-400 block font-bold font-mono uppercase">
+                      Monthly Budget ({currencySymbol})
+                    </span>
+                    <input
+                      type="number"
+                      placeholder="e.g. 5000"
+                      disabled={newCatType === "income"}
+                      value={newCatBudget}
+                      onChange={(e) => setNewCatBudget(e.target.value)}
+                      className="w-full bg-slate-900 p-2 rounded-lg border border-slate-700 outline-none font-bold font-mono text-[10px] disabled:opacity-30 text-white placeholder-slate-450 focus:border-indigo-500"
+                    />
+                  </div>
+                </div>
+
+                {/* Slider for threshold limit just for expense categories */}
+                {newCatType === "expense" && (
+                  <div className="space-y-1 bg-white/20 dark:bg-slate-900/40 p-2 rounded-lg border border-slate-150 dark:border-slate-800/80 mt-1">
+                    <div className="flex justify-between items-center text-[8.5px] font-mono font-bold">
+                      <span className="text-slate-400 uppercase">
+                        Warning Trigger Alert Threshold
+                      </span>
+                      <span className="text-indigo-650 dark:text-indigo-400 font-black">
+                        {newCatThreshold}%
+                      </span>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <input
+                        type="range"
+                        min={40}
+                        max={100}
+                        step={5}
+                        value={newCatThreshold}
+                        onChange={(e) =>
+                          setNewCatThreshold(parseInt(e.target.value))
+                        }
+                        className="flex-1 accent-[#5B4CFF] cursor-pointer h-1.5 bg-slate-200 dark:bg-slate-800 rounded-lg"
+                      />
+                    </div>
+                  </div>
+                )}
+
+                <button
+                  onClick={handleCreateCategorySubmit}
+                  className="w-full py-2 bg-[#4f46e5] hover:bg-indigo-700 text-white font-black text-[9px] uppercase tracking-widest font-mono rounded-lg transition-colors cursor-pointer"
+                >
+                  + Add New Category
+                </button>
+              </div>
+
+              {/* 2b. Checking and Modifying Category List grouped into distinct dropdown directories */}
+              <div className="space-y-2.5 pt-1 border-t border-slate-200 dark:border-slate-800 mt-4">
+                <div
+                  onClick={() =>
+                    setIsEntriesListCollapsed(!isEntriesListCollapsed)
+                  }
+                  className="flex justify-between items-center text-slate-400 dark:text-slate-350 select-none py-1.5 cursor-pointer hover:text-indigo-500 dark:hover:text-indigo-400"
+                >
+                  <span className="font-extrabold text-[11px] tracking-wider font-mono">
+                    CATEGORIES
+                  </span>
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setIsEntriesListCollapsed(!isEntriesListCollapsed);
+                    }}
+                    className="px-3 py-1 bg-transparent hover:bg-slate-100 dark:hover:bg-slate-800 text-[#5B4CFF] dark:text-indigo-400 border border-slate-300 dark:border-slate-700/60 font-black text-[9px] uppercase font-mono rounded-lg transition-colors cursor-pointer"
+                  >
+                    {isEntriesListCollapsed ? "Expand" : "Collapse"}
+                  </button>
+                </div>
+
+                <AnimatePresence initial={false}>
+                  {!isEntriesListCollapsed && (
+                    <motion.div
+                      initial={{ opacity: 0, height: 0 }}
+                      animate={{ opacity: 1, height: "auto" }}
+                      exit={{ opacity: 0, height: 0 }}
+                      className="space-y-4 overflow-hidden pr-0.5"
+                    >
+                      {/* -- 1. EXPENSES DROP DOWN SECTION -- */}
+                      <div className="space-y-2 bg-slate-50 dark:bg-slate-900/40 p-3.5 rounded-2xl border border-slate-100 dark:border-slate-800/80">
+                        <div
+                          onClick={() =>
+                            setIsExpenseListOpen(!isExpenseListOpen)
+                          }
+                          className="flex items-center justify-between cursor-pointer select-none"
+                        >
+                          <div className="flex items-center gap-2">
+                            <span className="h-2 w-2 rounded-full bg-rose-500 animate-pulse" />
+                            <span className="font-black text-[10px] text-slate-500 dark:text-slate-400 tracking-wider font-mono uppercase">
+                              EXPENSES
+                            </span>
+                            <span className="bg-rose-500/10 text-rose-500 text-[8px] font-mono px-2 py-0.5 rounded-full font-black">
+                              {
+                                categories.filter((c) => c.type !== "income")
+                                  .length
+                              }
+                            </span>
+                          </div>
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setIsExpenseListOpen(!isExpenseListOpen);
+                            }}
+                            className={`px-2.5 py-1 font-extrabold text-[8.5px] uppercase font-mono rounded-lg transition-all cursor-pointer border ${
+                              isExpenseListOpen
+                                ? "bg-[#5B4CFF] border-[#5B4CFF] text-white hover:bg-[#4d3fe0] shadow-sm"
+                                : "bg-transparent hover:bg-slate-250 dark:hover:bg-slate-800 text-[#5B4CFF] dark:text-indigo-400 border-slate-200 dark:border-slate-700"
+                            }`}
+                          >
+                            {isExpenseListOpen ? "Collapse" : "Edit / Modify"}
+                          </button>
+                        </div>
+
+                        <AnimatePresence initial={false}>
+                          {isExpenseListOpen && (
+                            <motion.div
+                              initial={{ opacity: 0, height: 0 }}
+                              animate={{
+                                opacity: 1,
+                                height: "auto",
+                                marginTop: 8,
+                              }}
+                              exit={{ opacity: 0, height: 0 }}
+                              className="space-y-3 overflow-hidden"
+                            >
+                              {categories.filter((c) => c.type !== "income")
+                                .length === 0 ? (
+                                <p className="text-[9px] text-slate-400 italic text-center py-2 font-mono">
+                                  No custom expense categories.
+                                </p>
+                              ) : (
+                                categories
+                                  .filter((c) => c.type !== "income")
+                                  .map((cat) => {
+                                    const isOpen = expandedCatId === cat.id;
+                                    const hasBudget = budgets.find(
+                                      (b) => b.categoryName === cat.name,
+                                    );
+                                    const limitAmountStr = hasBudget
+                                      ? `${currencySymbol}${hasBudget.limitAmount.toLocaleString()}`
+                                      : "NONE";
+
+                                    return (
+                                      <div key={cat.id} className="space-y-1">
+                                        {/* Main card */}
+                                        <div
+                                          onClick={() =>
+                                            setExpandedCatId(
+                                              isOpen ? null : cat.id,
+                                            )
+                                          }
+                                          className="bg-white dark:bg-slate-800/85 rounded-2xl p-4 flex items-center justify-between cursor-pointer shadow-sm hover:opacity-95 transition-all text-slate-800 dark:text-slate-100 border border-slate-150/40 dark:border-slate-700/50"
+                                        >
+                                          <div className="flex flex-col gap-1 items-start">
+                                            <span className="font-extrabold font-mono tracking-widest text-[#1E293B] dark:text-slate-200 text-[12px] uppercase">
+                                              {cat.name}
+                                            </span>
+                                            <span className="text-[9px] text-[#94A3B8] font-mono tracking-wide">
+                                              {cat.subcategories.length === 1
+                                                ? "1 active subcategory tag"
+                                                : `${cat.subcategories.length} active subcategory tags`}
+                                            </span>
+                                          </div>
+
+                                          <div className="flex flex-col items-end gap-1 text-right justify-center">
+                                            <div className="flex items-center gap-1">
+                                              <span className="text-[8px] uppercase font-black text-slate-400 font-mono tracking-wider">
+                                                LIMIT:
+                                              </span>
+                                              <span
+                                                className={`font-black font-mono text-[11.5px] ${hasBudget ? "text-[#5B4CFF] dark:text-indigo-400" : "text-slate-400 dark:text-slate-500"}`}
+                                              >
+                                                {limitAmountStr}
+                                              </span>
+                                            </div>
+
+                                            <button
+                                              onClick={(e) => {
+                                                e.stopPropagation();
+                                                setExpandedCatId(
+                                                  isOpen ? null : cat.id,
+                                                );
+                                              }}
+                                              className={`px-2.5 py-1 text-[8.5px] font-extrabold rounded-full tracking-wider uppercase cursor-pointer transition-all ${
+                                                isOpen
+                                                  ? "bg-[#5B4CFF] border-[#5B4CFF] text-white hover:bg-[#4d3fe0] shadow-sm"
+                                                  : "bg-indigo-50 dark:bg-indigo-950/45 border border-indigo-150/50 dark:border-indigo-900/60 text-[#5B4CFF] dark:text-indigo-400 hover:bg-indigo-100 dark:hover:bg-indigo-900/60"
+                                              }`}
+                                            >
+                                              {isOpen ? "Collapse" : "Edit"}
+                                            </button>
+                                          </div>
+                                        </div>
+
+                                        {/* Expanded sub-section */}
+                                        <AnimatePresence>
+                                          {isOpen && (
+                                            <motion.div
+                                              initial={{
+                                                height: 0,
+                                                opacity: 0,
+                                                marginTop: 0,
+                                              }}
+                                              animate={{
+                                                height: "auto",
+                                                opacity: 1,
+                                                marginTop: 4,
+                                              }}
+                                              exit={{
+                                                height: 0,
+                                                opacity: 0,
+                                                marginTop: 0,
+                                              }}
+                                              className="bg-[#0D152D]/95 rounded-2xl border border-[#1E2B4B] p-3 px-3 text-[10px] space-y-4 overflow-hidden shadow-inner font-mono text-slate-200"
+                                            >
+                                              {/* Budget limit section */}
+                                              <div className="space-y-2">
+                                                <span className="text-[8.5px] text-[#A7B1C2] font-black uppercase block font-mono tracking-wider">
+                                                  MONTHLY BUDGET (
+                                                  {currencySymbol})
+                                                </span>
+                                                <div className="flex gap-1.5 items-center w-full">
+                                                  <div className="w-[82px] min-w-[82px]">
+                                                    <input
+                                                      type="number"
+                                                      placeholder="3000"
+                                                      value={
+                                                        categoryBudgetInputs[
+                                                          cat.name
+                                                        ] ??
+                                                        (hasBudget
+                                                          ? hasBudget.limitAmount
+                                                          : "")
+                                                      }
+                                                      onChange={(e) => {
+                                                        const val =
+                                                          e.target.value;
+                                                        setCategoryBudgetInputs(
+                                                          (prev) => ({
+                                                            ...prev,
+                                                            [cat.name]: val,
+                                                          }),
+                                                        );
+                                                      }}
+                                                      className="w-full bg-[#050B18] border border-[#1E2B4B] px-1 py-1.5 rounded-lg text-white font-mono font-bold text-xs outline-none focus:border-indigo-500 text-center"
+                                                    />
+                                                  </div>
+                                                  <button
+                                                    onClick={() => {
+                                                      const val =
+                                                        categoryBudgetInputs[
+                                                          cat.name
+                                                        ] ??
+                                                        (hasBudget
+                                                          ? hasBudget.limitAmount.toString()
+                                                          : "");
+                                                      handleUpdateCategoryBudget(
+                                                        cat.name,
+                                                        val,
+                                                      );
+                                                      onTriggerNotification(
+                                                        "Limit Adjusted",
+                                                        `Category "${cat.name}" has been modified to ${currencySymbol}${parseFloat(val).toLocaleString() || "None"}`,
+                                                      );
+                                                    }}
+                                                    className="flex-1 bg-[#5B4CFF] hover:bg-[#4d3fe0] text-white rounded-lg font-bold py-1.5 text-[9px] font-mono uppercase tracking-wider cursor-pointer transition-colors text-center whitespace-nowrap px-1"
+                                                  >
+                                                    Save Limit
+                                                  </button>
+                                                </div>
+                                              </div>
+
+                                              {/* Alert Threshold Warning */}
+                                              <div className="space-y-1.5 border-t border-[#1E2B4B] pt-3.5">
+                                                <div className="flex justify-between items-center text-[8.5px] font-mono font-bold tracking-wider">
+                                                  <span className="text-[#A7B1C2] uppercase flex items-center gap-1">
+                                                    ⚠️ ALERT THRESHOLD
+                                                  </span>
+                                                  <span className="bg-[#1E1B4B] text-indigo-300 border border-[#2E288F] text-[9.5px] font-mono px-2 py-0.5 rounded-full font-black">
+                                                    {settings
+                                                      .categoryThresholds?.[
+                                                      cat.name
+                                                    ] ||
+                                                      settings.alertThresholdPercentage ||
+                                                      80}
+                                                    %
+                                                  </span>
+                                                </div>
+                                                <div className="flex items-center gap-2">
+                                                  <input
+                                                    type="range"
+                                                    min={40}
+                                                    max={100}
+                                                    step={5}
+                                                    value={
+                                                      settings
+                                                        .categoryThresholds?.[
+                                                        cat.name
+                                                      ] ||
+                                                      settings.alertThresholdPercentage ||
+                                                      80
+                                                    }
+                                                    onChange={(e) =>
+                                                      handleUpdateCategoryThreshold(
+                                                        cat.name,
+                                                        e.target.value,
+                                                      )
+                                                    }
+                                                    className="flex-1 accent-[#5B4CFF] cursor-pointer h-2 bg-[#050B18] rounded-lg"
+                                                  />
+                                                </div>
+                                                <p className="text-[8px] text-[#A7B1C2]/60 font-mono italic">
+                                                  Adjust color warn point for{" "}
+                                                  {cat.name} (fallback:{" "}
+                                                  {settings.alertThresholdPercentage ||
+                                                    85}
+                                                  %).
+                                                </p>
+                                              </div>
+
+                                              {/* Subcategory tag lists container */}
+                                              <div className="space-y-3 border-t border-[#1E2B4B] pt-3.5">
+                                                <span className="text-[8.5px] text-[#A7B1C2] font-black uppercase block font-mono tracking-wider">
+                                                  TAGS
+                                                </span>
+                                                <div className="flex flex-wrap gap-1.5 pb-1">
+                                                  {cat.subcategories.map(
+                                                    (sub) => (
+                                                      <div
+                                                        key={sub}
+                                                        className="flex items-center gap-1 bg-[#050B18] border border-[#1E2B4B] px-3 py-1 rounded-md font-semibold font-mono"
+                                                      >
+                                                        <span className="text-white text-[9.5px]">
+                                                          {sub}
+                                                        </span>
+                                                        <button
+                                                          onClick={(e) => {
+                                                            e.stopPropagation();
+                                                            handleDeleteSubcatInline(
+                                                              cat.id,
+                                                              sub,
+                                                              cat.name,
+                                                            );
+                                                          }}
+                                                          className="text-red-400 hover:text-red-500 font-black ml-1 text-[10.5px] cursor-pointer"
+                                                          title="Delete Tag"
+                                                        >
+                                                          ×
+                                                        </button>
+                                                      </div>
+                                                    ),
+                                                  )}
+                                                  {cat.subcategories.length ===
+                                                    0 && (
+                                                    <p className="text-[9px] italic text-[#A7B1C2]/40 font-mono">
+                                                      No active tags registered
+                                                      yet.
+                                                    </p>
+                                                  )}
+                                                </div>
+
+                                                {/* Add subcategory tag row */}
+                                                <div className="flex gap-2 pt-1.5">
+                                                  <input
+                                                    type="text"
+                                                    placeholder="Add subcategory tag (e.g. Fast Food)"
+                                                    value={
+                                                      inlineSubcatInputs[
+                                                        cat.id
+                                                      ] || ""
+                                                    }
+                                                    onChange={(e) =>
+                                                      setInlineSubcatInputs(
+                                                        (prev) => ({
+                                                          ...prev,
+                                                          [cat.id]:
+                                                            e.target.value,
+                                                        }),
+                                                      )
+                                                    }
+                                                    className="flex-1 bg-[#050B18] p-2 rounded-lg border border-[#1E2B4B] text-[10px] font-medium outline-none text-white placeholder-[#A7B1C2]/45 font-mono"
+                                                    onKeyDown={(e) => {
+                                                      if (e.key === "Enter") {
+                                                        e.preventDefault();
+                                                        handleAddSubcatInline(
+                                                          cat.id,
+                                                          cat.name,
+                                                        );
+                                                      }
+                                                    }}
+                                                  />
+                                                  <button
+                                                    onClick={() =>
+                                                      handleAddSubcatInline(
+                                                        cat.id,
+                                                        cat.name,
+                                                      )
+                                                    }
+                                                    className="bg-[#10B981] hover:bg-emerald-600 text-white select-none px-4 py-1.5 rounded-lg font-black text-[10px] font-mono uppercase cursor-pointer transition-colors"
+                                                  >
+                                                    + Tag
+                                                  </button>
+                                                </div>
+                                              </div>
+
+                                              {/* Delete Category Purge line */}
+                                              <div className="flex items-center justify-center pt-3 border-t border-[#1E2B4B] mt-2">
+                                                {deleteConfirms[cat.id] ? (
+                                                  <div className="flex flex-col items-center gap-1.5 w-full bg-[#3B0712]/40 p-2.5 rounded-lg border border-[#7F1D1D]/40">
+                                                    <span className="text-[8.5px] text-red-200 font-extrabold font-mono tracking-wider">
+                                                      PURGE CATEGORY & ALL TAGS?
+                                                    </span>
+                                                    <div className="flex items-center gap-2 font-mono">
+                                                      <button
+                                                        onClick={() => {
+                                                          const updatedCategories =
+                                                            categories.filter(
+                                                              (c) =>
+                                                                c.id !== cat.id,
+                                                            );
+                                                          onUpdateCategories(
+                                                            updatedCategories,
+                                                          );
+
+                                                          const updatedBudgets =
+                                                            budgets.filter(
+                                                              (b) =>
+                                                                b.categoryName !==
+                                                                cat.name,
+                                                            );
+                                                          onUpdateBudgets(
+                                                            updatedBudgets,
+                                                          );
+
+                                                          onTriggerNotification(
+                                                            "Category Purged",
+                                                            `Category "${cat.name}" has been removed completely.`,
+                                                          );
+                                                          setDeleteConfirms(
+                                                            (prev) => {
+                                                              const next = {
+                                                                ...prev,
+                                                              };
+                                                              delete next[
+                                                                cat.id
+                                                              ];
+                                                              return next;
+                                                            },
+                                                          );
+                                                        }}
+                                                        className="bg-red-650 hover:bg-red-705 text-white font-black px-2.5 py-1 rounded text-[8.5px] uppercase cursor-pointer"
+                                                      >
+                                                        YES, PURGE
+                                                      </button>
+                                                      <button
+                                                        onClick={() => {
+                                                          setDeleteConfirms(
+                                                            (prev) => ({
+                                                              ...prev,
+                                                              [cat.id]: false,
+                                                            }),
+                                                          );
+                                                        }}
+                                                        className="bg-[#050B18] hover:bg-slate-800 text-slate-300 border border-slate-700 font-extrabold px-2.5 py-1 rounded text-[8.5px] uppercase cursor-pointer"
+                                                      >
+                                                        NO
+                                                      </button>
+                                                    </div>
+                                                  </div>
+                                                ) : (
+                                                  <button
+                                                    onClick={() => {
+                                                      setDeleteConfirms(
+                                                        (prev) => ({
+                                                          ...prev,
+                                                          [cat.id]: true,
+                                                        }),
+                                                      );
+                                                    }}
+                                                    className="text-red-500 hover:text-red-400 font-mono font-black uppercase text-[10px] flex items-center gap-1.5 cursor-pointer whitespace-nowrap transition-colors"
+                                                  >
+                                                    <Trash2 className="h-3 w-3 text-red-500" />{" "}
+                                                    Delete Category
+                                                  </button>
+                                                )}
+                                              </div>
+                                            </motion.div>
+                                          )}
+                                        </AnimatePresence>
+                                      </div>
+                                    );
+                                  })
+                              )}
+                            </motion.div>
+                          )}
+                        </AnimatePresence>
+                      </div>
+
+                      {/* -- 2. INCOME DROP DOWN SECTION -- */}
+                      <div className="space-y-2 bg-slate-50 dark:bg-slate-900/40 p-3.5 rounded-2xl border border-slate-100 dark:border-slate-800/80">
+                        <div
+                          onClick={() => setIsIncomeListOpen(!isIncomeListOpen)}
+                          className="flex items-center justify-between cursor-pointer select-none"
+                        >
+                          <div className="flex items-center gap-2">
+                            <span className="h-2 w-2 rounded-full bg-emerald-500 animate-pulse" />
+                            <span className="font-black text-[10px] text-slate-500 dark:text-slate-400 tracking-wider font-mono uppercase">
+                              INCOME
+                            </span>
+                            <span className="bg-emerald-500/10 text-emerald-500 text-[8px] font-mono px-2 py-0.5 rounded-full font-black">
+                              {
+                                categories.filter((c) => c.type === "income")
+                                  .length
+                              }
+                            </span>
+                          </div>
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setIsIncomeListOpen(!isIncomeListOpen);
+                            }}
+                            className={`px-2.5 py-1 font-extrabold text-[8.5px] uppercase font-mono rounded-lg transition-all cursor-pointer border ${
+                              isIncomeListOpen
+                                ? "bg-[#5B4CFF] border-[#5B4CFF] text-white hover:bg-[#4d3fe0] shadow-sm"
+                                : "bg-transparent hover:bg-slate-250 dark:hover:bg-slate-800 text-[#5B4CFF] dark:text-indigo-400 border border-slate-200 dark:border-slate-700"
+                            }`}
+                          >
+                            {isIncomeListOpen ? "Collapse" : "Edit / Modify"}
+                          </button>
+                        </div>
+
+                        <AnimatePresence initial={false}>
+                          {isIncomeListOpen && (
+                            <motion.div
+                              initial={{ opacity: 0, height: 0 }}
+                              animate={{
+                                opacity: 1,
+                                height: "auto",
+                                marginTop: 8,
+                              }}
+                              exit={{ opacity: 0, height: 0 }}
+                              className="space-y-3 overflow-hidden"
+                            >
+                              {categories.filter((c) => c.type === "income")
+                                .length === 0 ? (
+                                <p className="text-[9px] text-slate-400 italic text-center py-2 font-mono">
+                                  No custom income categories.
+                                </p>
+                              ) : (
+                                categories
+                                  .filter((c) => c.type === "income")
+                                  .map((cat) => {
+                                    const isOpen = expandedCatId === cat.id;
+
+                                    return (
+                                      <div key={cat.id} className="space-y-1">
+                                        {/* Main card */}
+                                        <div
+                                          onClick={() =>
+                                            setExpandedCatId(
+                                              isOpen ? null : cat.id,
+                                            )
+                                          }
+                                          className="bg-white dark:bg-slate-800/85 rounded-2xl p-4 flex items-center justify-between cursor-pointer shadow-sm hover:opacity-95 transition-all text-slate-800 dark:text-slate-100 border border-slate-150/40 dark:border-slate-700/50"
+                                        >
+                                          <div className="flex flex-col gap-1 items-start">
+                                            <span className="font-extrabold font-mono tracking-widest text-[#1E293B] dark:text-slate-200 text-[12px] uppercase">
+                                              {cat.name}
+                                            </span>
+                                            <span className="text-[9px] text-[#94A3B8] font-mono tracking-wide">
+                                              {cat.subcategories.length === 1
+                                                ? "1 active subcategory tag"
+                                                : `${cat.subcategories.length} active subcategory tags`}
+                                            </span>
+                                          </div>
+
+                                          <div className="flex flex-col items-end gap-1 text-right justify-center">
+                                            <div className="flex items-center gap-1">
+                                              <span className="text-[8px] uppercase font-black text-slate-400 font-mono tracking-wider">
+                                                TYPE:
+                                              </span>
+                                              <span className="font-mono text-[11.5px] font-black text-emerald-500">
+                                                INCOME
+                                              </span>
+                                            </div>
+
+                                            <button
+                                              onClick={(e) => {
+                                                e.stopPropagation();
+                                                setExpandedCatId(
+                                                  isOpen ? null : cat.id,
+                                                );
+                                              }}
+                                              className={`px-2.5 py-1 text-[8.5px] font-extrabold rounded-full tracking-wider uppercase cursor-pointer transition-all ${
+                                                isOpen
+                                                  ? "bg-[#5B4CFF] border-[#5B4CFF] text-white hover:bg-[#4d3fe0] shadow-sm"
+                                                  : "bg-indigo-50 dark:bg-indigo-950/45 border border-indigo-150/50 dark:border-indigo-900/60 text-[#5B4CFF] dark:text-indigo-400 hover:bg-indigo-100 dark:hover:bg-indigo-900/60"
+                                              }`}
+                                            >
+                                              {isOpen ? "Collapse" : "Edit"}
+                                            </button>
+                                          </div>
+                                        </div>
+
+                                        {/* Expanded sub-section */}
+                                        <AnimatePresence>
+                                          {isOpen && (
+                                            <motion.div
+                                              initial={{
+                                                height: 0,
+                                                opacity: 0,
+                                                marginTop: 0,
+                                              }}
+                                              animate={{
+                                                height: "auto",
+                                                opacity: 1,
+                                                marginTop: 4,
+                                              }}
+                                              exit={{
+                                                height: 0,
+                                                opacity: 0,
+                                                marginTop: 0,
+                                              }}
+                                              className="bg-[#0D152D]/95 rounded-2xl border border-[#1E2B4B] p-3 px-3 text-[10px] space-y-4 overflow-hidden shadow-inner font-mono text-slate-200"
+                                            >
+                                              {/* Subcategory tag lists container */}
+                                              <div className="space-y-3">
+                                                <span className="text-[8.5px] text-[#A7B1C2] font-black uppercase block font-mono tracking-wider">
+                                                  TAGS
+                                                </span>
+                                                <div className="flex flex-wrap gap-1.5 pb-1">
+                                                  {cat.subcategories.map(
+                                                    (sub) => (
+                                                      <div
+                                                        key={sub}
+                                                        className="flex items-center gap-1 bg-[#050B18] border border-[#1E2B4B] px-3 py-1 rounded-md font-semibold font-mono"
+                                                      >
+                                                        <span className="text-white text-[9.5px]">
+                                                          {sub}
+                                                        </span>
+                                                        <button
+                                                          onClick={(e) => {
+                                                            e.stopPropagation();
+                                                            handleDeleteSubcatInline(
+                                                              cat.id,
+                                                              sub,
+                                                              cat.name,
+                                                            );
+                                                          }}
+                                                          className="text-red-400 hover:text-red-500 font-black ml-1 text-[10.5px] cursor-pointer"
+                                                          title="Delete Tag"
+                                                        >
+                                                          ×
+                                                        </button>
+                                                      </div>
+                                                    ),
+                                                  )}
+                                                  {cat.subcategories.length ===
+                                                    0 && (
+                                                    <p className="text-[9px] italic text-[#A7B1C2]/40 font-mono">
+                                                      No active tags registered
+                                                      yet.
+                                                    </p>
+                                                  )}
+                                                </div>
+
+                                                {/* Add subcategory tag row */}
+                                                <div className="flex gap-1.5 pt-1.5 items-center w-full">
+                                                  <div className="flex-1 min-w-0">
+                                                    <input
+                                                      type="text"
+                                                      placeholder="Add tag (e.g. Salary)"
+                                                      value={
+                                                        inlineSubcatInputs[
+                                                          cat.id
+                                                        ] || ""
+                                                      }
+                                                      onChange={(e) =>
+                                                        setInlineSubcatInputs(
+                                                          (prev) => ({
+                                                            ...prev,
+                                                            [cat.id]:
+                                                              e.target.value,
+                                                          }),
+                                                        )
+                                                      }
+                                                      className="w-full bg-[#050B18] p-2 rounded-lg border border-[#1E2B4B] text-[10px] font-medium outline-none text-white placeholder-[#A7B1C2]/45 font-mono min-w-0"
+                                                      onKeyDown={(e) => {
+                                                        if (e.key === "Enter") {
+                                                          e.preventDefault();
+                                                          handleAddSubcatInline(
+                                                            cat.id,
+                                                            cat.name,
+                                                          );
+                                                        }
+                                                      }}
+                                                    />
+                                                  </div>
+                                                  <button
+                                                    onClick={() =>
+                                                      handleAddSubcatInline(
+                                                        cat.id,
+                                                        cat.name,
+                                                      )
+                                                    }
+                                                    className="bg-[#10B981] hover:bg-emerald-600 text-white select-none px-3 py-2 rounded-lg font-black text-[9.5px] font-mono uppercase cursor-pointer transition-colors whitespace-nowrap"
+                                                  >
+                                                    + Tag
+                                                  </button>
+                                                </div>
+                                              </div>
+
+                                              {/* Delete Category Purge line */}
+                                              <div className="flex items-center justify-center pt-3 border-t border-[#1E2B4B] mt-2">
+                                                {deleteConfirms[cat.id] ? (
+                                                  <div className="flex flex-col items-center gap-1.5 w-full bg-[#3B0712]/40 p-2.5 rounded-lg border border-[#7F1D1D]/40">
+                                                    <span className="text-[8.5px] text-red-200 font-extrabold font-mono tracking-wider">
+                                                      PURGE CATEGORY & ALL TAGS?
+                                                    </span>
+                                                    <div className="flex items-center gap-2 font-mono">
+                                                      <button
+                                                        onClick={() => {
+                                                          const updatedCategories =
+                                                            categories.filter(
+                                                              (c) =>
+                                                                c.id !== cat.id,
+                                                            );
+                                                          onUpdateCategories(
+                                                            updatedCategories,
+                                                          );
+
+                                                          const updatedBudgets =
+                                                            budgets.filter(
+                                                              (b) =>
+                                                                b.categoryName !==
+                                                                cat.name,
+                                                            );
+                                                          onUpdateBudgets(
+                                                            updatedBudgets,
+                                                          );
+
+                                                          onTriggerNotification(
+                                                            "Category Purged",
+                                                            `Category "${cat.name}" has been removed completely.`,
+                                                          );
+                                                          setDeleteConfirms(
+                                                            (prev) => {
+                                                              const next = {
+                                                                ...prev,
+                                                              };
+                                                              delete next[
+                                                                cat.id
+                                                              ];
+                                                              return next;
+                                                            },
+                                                          );
+                                                        }}
+                                                        className="bg-red-650 hover:bg-red-700 text-white font-black px-2.5 py-1 rounded text-[8.5px] uppercase cursor-pointer"
+                                                      >
+                                                        YES, PURGE
+                                                      </button>
+                                                      <button
+                                                        onClick={() => {
+                                                          setDeleteConfirms(
+                                                            (prev) => ({
+                                                              ...prev,
+                                                              [cat.id]: false,
+                                                            }),
+                                                          );
+                                                        }}
+                                                        className="bg-[#050B18] hover:bg-slate-800 text-slate-300 border border-slate-700 font-extrabold px-2.5 py-1 rounded text-[8.5px] uppercase cursor-pointer"
+                                                      >
+                                                        NO
+                                                      </button>
+                                                    </div>
+                                                  </div>
+                                                ) : (
+                                                  <button
+                                                    onClick={() => {
+                                                      setDeleteConfirms(
+                                                        (prev) => ({
+                                                          ...prev,
+                                                          [cat.id]: true,
+                                                        }),
+                                                      );
+                                                    }}
+                                                    className="text-red-500 hover:text-red-400 font-mono font-black uppercase text-[10px] flex items-center gap-1.5 cursor-pointer whitespace-nowrap transition-colors"
+                                                  >
+                                                    <Trash2 className="h-3 w-3 text-red-500" />{" "}
+                                                    Delete Category
+                                                  </button>
+                                                )}
+                                              </div>
+                                            </motion.div>
+                                          )}
+                                        </AnimatePresence>
+                                      </div>
+                                    );
+                                  })
+                              )}
+                            </motion.div>
+                          )}
+                        </AnimatePresence>
+                      </div>
+                    </motion.div>
+                  )}
+                </AnimatePresence>
+              </div>
+            </motion.div>
+          )}
+        </AnimatePresence>
+      </div>
+
+      {/* BLOCK 3: REPORTS & STATEMENT EXPORTER (Filtered, monthly/yearly wise dynamic selector) */}
+      <div className="bg-white dark:bg-slate-850 p-4 rounded-2xl border border-slate-100 dark:border-slate-800 shadow-sm space-y-3.5">
+        <h3 className="text-[10px] font-black uppercase text-slate-400 dark:text-slate-400 tracking-wider font-mono flex items-center gap-1.5">
+          <FileText className="h-3.5 w-3.5 text-indigo-500" /> REPORTS &
+          STATEMENT EXPORTER
         </h3>
-        
-        <p className="text-[10px] text-slate-500 dark:text-slate-400 leading-normal">
-          Filter your offline transaction database and generate print-ready statements. You can partition data by specific month, dynamic year, or export all records instantly.
+
+        <p className="text-[9px] text-slate-450 dark:text-slate-500 leading-normal">
+          Filter your offline transaction database and generate print-ready
+          statements. You can partition data by specific month, dynamic year, or
+          export all records instantly.
         </p>
 
-        <div className="grid grid-cols-2 gap-3 pb-1">
-          {/* Period manual text entry */}
-          <div className="col-span-2">
-            <label className="text-[9px] text-slate-400 font-bold uppercase block tracking-wider mb-1 font-mono">Timeframe Periods (Comma-separated)</label>
-            <input
-              type="text"
-              value={periodInputVal}
-              onChange={(e) => setPeriodInputVal(e.target.value)}
-              className="w-full bg-slate-50 dark:bg-slate-900 border border-slate-150 dark:border-slate-750 text-slate-700 dark:text-slate-300 p-2 rounded-lg text-xs outline-none font-mono font-medium"
-              placeholder="e.g. 2026-06, 2026-05"
-            />
-          </div>
+        {/* Timeframe Periods Input */}
+        <div className="space-y-1">
+          <span className="text-[8px] text-slate-400 dark:text-slate-400 font-mono font-bold uppercase tracking-wider block">
+            TIMEFRAME PERIODS (COMMA-SEPARATED)
+          </span>
+          <input
+            type="text"
+            value={timeframeInput}
+            onChange={(e) => setTimeframeInput(e.target.value)}
+            placeholder="e.g. 2026-06, 2026-05"
+            className="w-full bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-750 px-3 py-2 text-xs font-bold font-mono rounded-xl text-indigo-600 dark:text-indigo-400 outline-none focus:ring-1 focus:ring-indigo-500 transition-all"
+          />
+        </div>
 
-          {/* Quick-toggle tags chips */}
-          <div className="col-span-2 space-y-1">
-            <span className="text-[8px] text-slate-400 dark:text-slate-500 font-bold uppercase block font-mono">Quick-toggle timeframe months:</span>
-            <div className="flex flex-wrap gap-1">
-              {[
-                { id: '2026-06', name: 'June 26' },
-                { id: '2026-05', name: 'May 26' },
-                { id: '2026-04', name: 'April 26' },
-                { id: '2026-03', name: 'March 26' },
-                { id: 'year_2026', name: 'Full 2026' },
-                { id: 'all', name: 'Lifetime' }
-              ].map(p => {
-                const isActive = periodInputVal.split(',').map(s => s.trim().toLowerCase()).includes(p.id.toLowerCase());
-                return (
-                  <button
-                    key={p.id}
-                    onClick={() => {
-                      let items = periodInputVal.split(',').map(s => s.trim()).filter(Boolean);
-                      if (p.id === 'all') {
-                        setPeriodInputVal('all');
-                        return;
-                      }
-                      items = items.filter(s => s.toLowerCase() !== 'all');
-                      if (items.some(s => s.toLowerCase() === p.id.toLowerCase())) {
-                        items = items.filter(s => s.toLowerCase() !== p.id.toLowerCase());
-                      } else {
-                        items.push(p.id);
-                      }
-                      setPeriodInputVal(items.length > 0 ? items.join(', ') : '2026-06');
-                    }}
-                    type="button"
-                    className={`px-2 py-0.5 rounded text-[10px] font-bold transition-all cursor-pointer ${
-                      isActive 
-                        ? 'bg-indigo-600 text-white shadow-xs' 
-                        : 'bg-slate-100 dark:bg-slate-900 text-slate-500 hover:text-slate-700 dark:hover:text-slate-300'
-                    }`}
-                  >
-                    {isActive ? `✓ ${p.name}` : `+ ${p.name}`}
-                  </button>
-                );
-              })}
-            </div>
-          </div>
-
-          {/* Format Selection Row */}
-          <div className="col-span-2">
-            <label className="text-[9px] text-slate-400 font-bold uppercase block tracking-wider mb-1">Export Format type</label>
-            <div className="grid grid-cols-2 gap-1 bg-slate-50 dark:bg-slate-900 p-1 rounded-lg border border-slate-150 dark:border-slate-750">
-              <button
-                type="button"
-                onClick={() => setReportFormat('pdf')}
-                className={`py-1 rounded text-[10px] font-black uppercase cursor-pointer transition-all ${
-                  reportFormat === 'pdf' ? 'bg-indigo-600 text-white shadow-xs' : 'text-slate-400 hover:text-slate-200'
-                }`}
-              >
-                PDF Document (.pdf)
-              </button>
-              <button
-                type="button"
-                onClick={() => setReportFormat('excel')}
-                className={`py-1 rounded text-[10px] font-black uppercase cursor-pointer transition-all ${
-                  reportFormat === 'excel' ? 'bg-indigo-600 text-white shadow-xs' : 'text-slate-400 hover:text-slate-200'
-                }`}
-              >
-                Excel Spreadsheet (.csv)
-              </button>
-            </div>
+        {/* Quick-Toggle Month Selection Tags */}
+        <div className="space-y-1.5">
+          <span className="text-[8px] text-slate-400 dark:text-slate-400 font-mono font-bold uppercase tracking-wider block">
+            QUICK-TOGGLE MONTHS :
+          </span>
+          <div className="flex flex-wrap gap-1.5">
+            {[
+              { label: "June 26", val: "2026-06" },
+              { label: "May 26", val: "2026-05" },
+              { label: "April 26", val: "2026-04" },
+              { label: "March 26", val: "2026-03" },
+              { label: "Full 2026", val: "2026" },
+              { label: "Lifetime", val: "lifetime" },
+            ].map((p) => {
+              const isSelected = activeTimeframePills.includes(p.val);
+              return (
+                <button
+                  key={p.val}
+                  onClick={() => handleTogglePill(p.val)}
+                  className={`text-[9px] font-bold py-1 px-2.5 rounded-full border transition-all cursor-pointer font-sans ${
+                    isSelected
+                      ? "bg-indigo-50 border-indigo-200 dark:bg-indigo-950/40 dark:border-indigo-800 text-indigo-600 dark:text-indigo-300 font-extrabold"
+                      : "bg-white border-slate-150 dark:bg-slate-800 dark:border-slate-75 * text-slate-500 dark:text-slate-400"
+                  }`}
+                >
+                  {isSelected ? "✓ " : "+ "}
+                  {p.label}
+                </button>
+              );
+            })}
           </div>
         </div>
 
-        {/* Dual Actions: Export & Share */}
+        {/* Export format tabs selector */}
+        <div className="space-y-1">
+          <span className="text-[8px] text-slate-400 dark:text-slate-400 font-mono font-bold uppercase tracking-wider block">
+            EXPORT FORMAT TYPE
+          </span>
+          <div className="grid grid-cols-2 gap-1 bg-slate-50 dark:bg-slate-900/60 p-1 rounded-xl border border-slate-100 dark:border-slate-800/80">
+            <button
+              onClick={() => setExportFormat("pdf")}
+              className={`py-1.5 text-[8.5px] font-mono font-black uppercase text-center rounded-lg transition-all cursor-pointer border ${
+                exportFormat === "pdf"
+                  ? "bg-[#4f46e5] text-white border-indigo-500/20 shadow-xs"
+                  : "bg-transparent text-slate-400 border-transparent hover:text-slate-500"
+              }`}
+            >
+              PDF DOCUMENT (.PDF)
+            </button>
+            <button
+              onClick={() => setExportFormat("excel")}
+              className={`py-1.5 text-[8.5px] font-mono font-black uppercase text-center rounded-lg transition-all cursor-pointer border ${
+                exportFormat === "excel"
+                  ? "bg-[#4f46e5] text-white border-indigo-500/20 shadow-xs"
+                  : "bg-transparent text-slate-400 border-transparent hover:text-slate-500"
+              }`}
+            >
+              EXCEL SPREADSHEET (.CSV)
+            </button>
+          </div>
+        </div>
+
+        {/* Export & share action layouts side-by-side matches screenshot style */}
         <div className="grid grid-cols-2 gap-2 pt-1">
+          {/* Main Action Exporter trigger */}
           <button
-            type="button"
-            onClick={handleGenerateStatement}
-            className="py-2.5 bg-indigo-600 hover:bg-indigo-700 active:scale-95 text-white rounded-xl text-xs font-black tracking-wider uppercase flex items-center justify-center gap-1.5 cursor-pointer shadow border border-indigo-500/20 transition-all font-mono"
+            onClick={
+              exportFormat === "pdf" ? handleExportToPDF : handleExportToExcel
+            }
+            className="flex py-2.5 bg-[#4f46e5] hover:bg-indigo-700 active:scale-95 text-white rounded-xl items-center justify-center gap-1.5 text-[10px] font-black uppercase font-mono cursor-pointer transition-all border border-indigo-500/10 shadow-sm"
           >
-            {reportFormat === 'pdf' ? <FileText className="h-4 w-4" /> : <FileSpreadsheet className="h-4 w-4" />}
-            Export
+            <FileSpreadsheet className="h-4 w-4 text-white/90" /> EXPORT
           </button>
+
+          {/* Share Trigger Action */}
           <button
-            type="button"
-            onClick={handleOpenShareSheet}
-            className="py-2.5 bg-indigo-100 hover:bg-indigo-200 dark:bg-slate-700 dark:hover:bg-slate-650 active:scale-95 text-indigo-700 dark:text-indigo-200 rounded-xl text-xs font-black tracking-wider uppercase flex items-center justify-center gap-1.5 cursor-pointer shadow-xs border border-indigo-200/50 dark:border-slate-600 transition-all font-mono"
+            onClick={handleShareAction}
+            className="flex py-2.5 bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-750 active:scale-95 text-slate-700 dark:text-slate-200 rounded-xl items-center justify-center gap-1.5 text-[10px] font-black uppercase font-mono cursor-pointer transition-all border border-slate-200 dark:border-slate-700/80 shadow-xs"
           >
-            <CloudLightning className="h-4 w-4" />
-            Share
+            <Check className="h-4 w-4 text-slate-500 dark:text-slate-400" />{" "}
+            SHARE
           </button>
         </div>
       </div>
 
-      {/* 2.5 Personal Profile Customization */}
-      <div className="bg-white dark:bg-slate-800 p-4 rounded-xl border border-slate-100 dark:border-slate-800 shadow-sm space-y-3">
-        <div className="flex items-center justify-between pb-1 border-b border-slate-100 dark:border-slate-700/60">
-          <h3 className="text-xs font-black uppercase text-slate-400 tracking-wider flex items-center gap-1.5 font-mono">
-            <User className="h-4 w-4 text-indigo-500" />
-            User Profile Configuration
-          </h3>
-        </div>
-        <div className="space-y-3 pt-1">
-          <div>
-            <label className="text-[10px] text-slate-500 font-bold uppercase block mb-1">Your Display Name</label>
-            <div className="flex gap-2">
-              <input
-                type="text"
-                placeholder="e.g. Deepak"
-                value={profileName}
-                onChange={(e) => setProfileName(e.target.value)}
-                className="bg-slate-50 dark:bg-slate-700 p-2.5 text-xs rounded-xl flex-1 text-slate-800 dark:text-slate-150 outline-none border border-slate-150 dark:border-slate-600 focus:border-indigo-500 transition-all font-sans font-medium"
-              />
-              <button
-                onClick={handleSaveProfileName}
-                className="px-4 py-2.5 bg-indigo-600 hover:bg-indigo-700 active:scale-95 text-white rounded-xl text-xs font-bold font-mono transition-all cursor-pointer shadow-sm border border-indigo-500/20"
-              >
-                Save
-              </button>
-            </div>
-            {nameSuccess && (
-              <p className="text-emerald-500 text-[10px] font-bold mt-1.5 flex items-center gap-1">
-                <Check className="h-3.5 w-3.5" /> Name saved successfully! Greetings updated.
-              </p>
-            )}
-          </div>
-        </div>
-      </div>
-
-      {/* 3. Security Pin Settings & Recovery Memory Hint */}
-      <div className="bg-white dark:bg-slate-800 p-4 rounded-xl border border-slate-100 dark:border-slate-800 shadow-sm space-y-3">
-        <div className="flex items-center justify-between pb-1 border-b border-slate-100 dark:border-slate-700/60">
-          <h3 className="text-xs font-black uppercase text-slate-400 tracking-wider flex items-center gap-1.5 font-mono">
-            <Key className="h-4 w-4 text-amber-500" />
-            PIN Lock Configuration
+      {/* BLOCK 4: Entry Security settings PIN lock & wipes */}
+      <div className="bg-white dark:bg-slate-850 p-4 rounded-xl border border-slate-150 dark:border-slate-800 shadow-xs space-y-2">
+        <div className="flex justify-between items-center">
+          <h3 className="text-[10px] font-black uppercase text-slate-400 dark:text-slate-500 tracking-wider font-mono flex items-center gap-1.5">
+            <Key className="h-3.5 w-3.5 text-indigo-500" /> Modify PIN Lock
           </h3>
           <button
             onClick={() => setPinChangeOpen(!pinChangeOpen)}
-            className="text-xs text-indigo-500 font-bold hover:underline"
+            className="text-[9px] font-black text-[#4f46e5] hover:underline font-mono uppercase"
           >
-            {pinChangeOpen ? 'Collapse' : 'Modify PIN'}
+            {pinChangeOpen ? "Lock Menu" : "Modify PIN"}
           </button>
         </div>
+        <p className="text-[9.5px] text-slate-400 leading-normal">
+          Secure your private finance records with a secure 4-digit lockout
+          padlock code.
+        </p>
 
-        {pinChangeOpen ? (
-          <div className="space-y-2.5 pt-1.5">
-            <div>
-              <label className="text-[10px] text-slate-500 font-bold uppercase">Current Lock PIN</label>
-              <input
-                type="password"
-                maxLength={4}
-                placeholder="••••"
-                value={oldPin}
-                onChange={(e) => setOldPin(e.target.value)}
-                className="bg-slate-100 dark:bg-slate-700 p-2 text-xs rounded-lg w-full text-center tracking-widest font-mono mt-1 text-slate-800 dark:text-slate-150 outline-none"
-              />
-            </div>
-            <div className="grid grid-cols-2 gap-2">
-              <div>
-                <label className="text-[10px] text-slate-500 font-bold uppercase block">New Lock PIN</label>
-                <input
-                  type="password"
-                  maxLength={4}
+        {pinChangeOpen && (
+          <div className="p-3 bg-slate-50 dark:bg-slate-900 rounded-xl space-y-3 pt-4 border border-slate-200 dark:border-slate-800 animate-fade text-xs font-sans mt-2">
+            {pinError && (
+              <p className="text-[10px] text-rose-500 bg-rose-500/5 p-1 px-2 rounded font-bold">
+                {pinError}
+              </p>
+            )}
+            {pinSuccess && (
+              <p className="text-[10px] text-emerald-500 bg-emerald-500/5 p-1 px-2 rounded font-extrabold font-mono">
+                PIN SAVED SUCCESSFULLY ✓
+              </p>
+            )}
+
+            <div className="grid grid-cols-3 gap-2">
+              <div className="space-y-0.5">
+                <span className="text-[8.5px] text-slate-400 font-bold font-mono">
+                  Old PIN
+                </span>
+                <SecurePinInput
+                  value={oldPin}
+                  onChange={setOldPin}
                   placeholder="••••"
+                  className="w-full text-center p-2 rounded-lg bg-white dark:bg-slate-800 border focus:border-indigo-500 outline-none text-slate-800 dark:text-slate-100 font-mono text-xs"
+                />
+              </div>
+              <div className="space-y-0.5">
+                <span className="text-[8.5px] text-slate-400 font-bold font-mono">
+                  New PIN
+                </span>
+                <SecurePinInput
                   value={newPin}
-                  onChange={(e) => setNewPin(e.target.value)}
-                  className="bg-slate-100 dark:bg-slate-700 p-2 text-xs rounded-lg w-full text-center tracking-widest font-mono mt-1 text-slate-800 dark:text-slate-150 outline-none"
+                  onChange={setNewPin}
+                  placeholder="••••"
+                  className="w-full text-center p-2 rounded-lg bg-white dark:bg-slate-800 border focus:border-indigo-500 outline-none text-slate-800 dark:text-slate-100 font-mono text-xs"
                 />
               </div>
-              <div>
-                <label className="text-[10px] text-slate-500 font-bold uppercase block">Confirm New PIN</label>
-                <input
-                  type="password"
-                  maxLength={4}
-                  placeholder="••••"
+              <div className="space-y-0.5">
+                <span className="text-[8.5px] text-slate-400 font-bold font-mono">
+                  Confirm
+                </span>
+                <SecurePinInput
                   value={confirmPin}
-                  onChange={(e) => setConfirmPin(e.target.value)}
-                  className="bg-slate-100 dark:bg-slate-700 p-2 text-xs rounded-lg w-full text-center tracking-widest font-mono mt-1 text-slate-800 dark:text-slate-150 outline-none"
+                  onChange={setConfirmPin}
+                  placeholder="••••"
+                  className="w-full text-center p-2 rounded-lg bg-white dark:bg-slate-800 border focus:border-indigo-500 outline-none text-slate-800 dark:text-slate-100 font-mono text-xs"
                 />
               </div>
             </div>
 
-            {/* Custom security PIN memory hint option requested */}
-            <div>
-              <label className="text-[10px] text-slate-500 font-bold uppercase block">Custom Security PIN Hint Text</label>
-              <span className="text-[9px] text-slate-400 block mb-1">Set a self reminder text. It is displayed when tapping "Need a hint?" on the unlock screen.</span>
+            <div className="space-y-0.5">
+              <span className="text-[8.5px] text-slate-400 font-bold">
+                Custom Hint helper
+              </span>
               <input
                 type="text"
-                placeholder="e.g. My sibling birthday or last digits of vehicle number"
                 value={customPinHint}
                 onChange={(e) => setCustomPinHint(e.target.value)}
-                className="bg-slate-100 dark:bg-slate-700 p-2 text-xs rounded-lg w-full text-slate-800 dark:text-slate-150 outline-none font-medium mt-0.5"
+                placeholder="e.g. Year of graduation"
+                className="w-full p-2 bg-white dark:bg-slate-800 border rounded-lg focus:border-indigo-500 outline-none"
               />
             </div>
-
-            {pinError && <p className="text-red-500 text-[10px] font-bold text-center">{pinError}</p>}
-            {pinSuccess && <p className="text-emerald-500 text-[10px] font-bold text-center flex items-center justify-center gap-0.5"><Check className="h-3 w-3" /> PIN Saved Successfully!</p>}
 
             <button
               onClick={handlePinUpdate}
-              className="py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg text-xs font-bold w-full mt-2 cursor-pointer transition-colors"
+              className="w-full py-2 bg-[#4f46e5] hover:bg-indigo-700 text-white rounded-lg font-black uppercase font-mono tracking-wide text-[9px] transition-all cursor-pointer shadow-sm"
             >
-              Update lock PIN & Custom Hint
+              Update Security PIN
             </button>
           </div>
-        ) : (
-          <p className="text-xs text-slate-500 leading-normal">
-            Your physical expense tracker with SQLite is encrypted offline behind your lock code. Access token PIN hint: <strong className="text-slate-750 dark:text-slate-350">{settings.pinHint || 'None configured'}</strong>.
-          </p>
         )}
       </div>
 
-      {/* 4. Notification Frequency Config */}
-      <div className="bg-white dark:bg-slate-800 p-4 rounded-xl border border-slate-100 dark:border-slate-800 shadow-sm space-y-3">
-        <h3 className="text-xs font-black uppercase text-slate-400 tracking-wider flex items-center gap-1.5 font-mono">
-          <Bell className="h-4 w-4 text-amber-500" />
-          Reminder Interval Config
-        </h3>
-
-        <div className="space-y-3">
-          <div>
-            <label className="text-[10px] text-slate-500 font-bold uppercase block text-left">Active Alarm Intervals</label>
-            <p className="text-[10px] text-slate-400 mb-2">Configure background local triggers: Don&apos;t forget to record your expenses.</p>
-            <div className="grid grid-cols-4 gap-1.5 text-[10px] font-bold">
-              {['Every 1 Hour', 'Every 2 Hours', 'Every 4 Hours', 'Disabled'].map(opt => {
-                const isSelected = settings.reminderFrequency === opt;
-                return (
-                  <button
-                    key={opt}
-                    onClick={() => handleReminderChange(opt as any)}
-                    className={`py-2 px-1 rounded-lg border text-center transition-all cursor-pointer ${
-                      isSelected
-                        ? 'bg-indigo-600 border-indigo-600 text-white shadow-sm'
-                        : 'bg-slate-50 dark:bg-slate-900 border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-400 hover:bg-slate-100'
-                    }`}
-                  >
-                    {opt.replace('Every ', '')}
-                  </button>
-                );
-              })}
-            </div>
-            
-            {/* Explanatory & Interactive testing subcase */}
-            <div className="mt-3 p-3 bg-slate-50 dark:bg-slate-900 rounded-lg border border-slate-100 dark:border-slate-800 text-left space-y-2">
-              <div className="flex items-center justify-between">
-                <span className="text-[10px] font-bold text-slate-500 dark:text-slate-400 uppercase flex items-center gap-1.5">
-                  <span className={`h-2.5 w-2.5 rounded-full ${settings.reminderFrequency !== 'Disabled' ? 'bg-emerald-500 animate-pulse' : 'bg-slate-300'}`} />
-                  Android Status: {settings.reminderFrequency !== 'Disabled' ? 'Alarm Registered' : 'Inactive'}
-                </span>
-                {settings.reminderFrequency !== 'Disabled' && (
-                  <button
-                    onClick={() => onTriggerNotification('⏰ Don\'t forget to record your expenses!', 'Keep your personal budget on track!')}
-                    className="text-[9px] font-bold text-indigo-600 hover:text-indigo-500 hover:underline cursor-pointer"
-                  >
-                    Test Alarm Now &rarr;
-                  </button>
-                )}
-              </div>
-              <p className="text-[10.5px] text-slate-500 dark:text-slate-400 leading-normal">
-                {settings.reminderFrequency !== 'Disabled' ? (
-                  <>
-                    <strong>Real-Time Android Execution:</strong> Once installed on your device, the chosen interval (e.g., every {settings.reminderFrequency.replace('Every ', '')}) is registered directly in the Android OS System Alarm Service via <code className="bg-slate-200 dark:bg-slate-800 px-1 py-0.5 rounded font-mono text-[9.5px]">android_alarm_manager_plus</code>. The system wakes up a background worker at exactly that hourly frequency, even when your screen is locked or the app is closed, to deliver a dynamic push warning reminding you to log your transactions.
-                  </>
-                ) : (
-                  <>
-                    <strong>Real-Time Android Execution:</strong> Select an interval to register a low-battery background alarm with the Android OS that schedules push alerts in real-time.
-                  </>
-                )}
-              </p>
-            </div>
+      {/* GOOGLE DRIVE BACKUP TO DRIVE & RESTORE IN-APP PANEL */}
+      <div className="bg-[#0D152D]/95 rounded-2xl border border-slate-800/80 p-4 space-y-3.5 shadow-lg mt-2 text-slate-200">
+        <div className="flex justify-between items-center bg-[#070D1A]/50 -m-4 p-4 rounded-t-2xl border-b border-slate-800/60 mb-2">
+          <div className="flex items-center gap-2">
+            <Cloud className="h-4 w-4 text-[#5B4CFF]" />
+            <span className="text-[10px] font-black uppercase text-indigo-400 font-mono tracking-wider">
+              GOOGLE DRIVE INTEGRATION
+            </span>
           </div>
+          <span className="text-[8px] bg-indigo-950 text-indigo-300 border border-indigo-800 px-1.5 py-0.5 rounded font-mono font-bold uppercase">
+            Simulated
+          </span>
+        </div>
+        <div className="grid grid-cols-2 gap-3.5 pt-2">
+          <button
+            onClick={handleBackupToDrive}
+            className="flex py-2.5 bg-[#4f46e5] hover:bg-indigo-700 active:scale-95 text-white rounded-xl items-center justify-center gap-1.5 text-[9px] font-black uppercase font-mono cursor-pointer transition-all border border-indigo-500/10 shadow-md"
+          >
+            <Cloud className="h-4 w-4 text-white/95" /> BACKUP TO DRIVE
+          </button>
+
+          <button
+            onClick={handleRestoreFromDrive}
+            className="flex py-2.5 bg-slate-100 hover:bg-slate-200 active:scale-95 text-slate-800 rounded-xl items-center justify-center gap-1.5 text-[9px] font-black uppercase font-mono cursor-pointer transition-all border border-slate-200 shadow-xs"
+          >
+            <Download className="h-4 w-4 text-slate-600" /> RESTORE BACKUP
+          </button>
         </div>
       </div>
 
-      {/* 5. Cloud Auto Backups (Google Drive Simulation) */}
-      <div className="bg-white dark:bg-slate-800 p-4 rounded-xl border border-slate-100 dark:border-slate-800 shadow-sm space-y-3">
-        <h3 className="text-xs font-black uppercase text-slate-400 tracking-wider flex items-center gap-1.5 font-mono">
-          <CloudLightning className="h-4 w-4 text-indigo-500" />
-          Cloud Backup & Restores (Google Drive)
-        </h3>
-
-        <div className="space-y-3">
-          <div>
-            <label className="text-[10px] text-slate-500 font-bold uppercase block text-left">Auto-Sync Frequency</label>
-            <p className="text-[10px] text-slate-400 mb-2">Frequency database is safely backed up silently inside Drive Private Sandbox</p>
-            <div className="grid grid-cols-3 gap-1.5 text-[11px] font-bold font-mono">
-              {['Daily', 'Weekly', 'Monthly'].map(freq => {
-                const isSelected = settings.backupFrequency === freq;
-                return (
-                  <button
-                    key={freq}
-                    onClick={() => handleBackupFreqChange(freq as any)}
-                    className={`py-2 rounded-lg border text-center transition-all cursor-pointer ${
-                      isSelected
-                        ? 'bg-indigo-600 border-indigo-600 text-white'
-                        : 'bg-slate-50 dark:bg-slate-900 border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-400 hover:bg-slate-100'
-                    }`}
-                  >
-                    {freq}
-                  </button>
-                );
-              })}
-            </div>
-          </div>
-
-          <div className="p-3 bg-slate-50 dark:bg-slate-900 rounded-lg space-y-2 text-xs border border-slate-200 dark:border-slate-805">
-            <div className="flex justify-between items-center text-[10px]">
-              <span className="text-slate-400 uppercase font-black font-mono">Cloud Connection Status</span>
-              {settings.googleDriveConnected ? (
-                <span className="text-emerald-500 font-bold flex items-center gap-1 font-mono">
-                  ● Connected ({settings.googleDriveEmail || 'your.account@gmail.com'})
-                </span>
-              ) : (
-                <span className="text-amber-500 dark:text-amber-400 font-bold flex items-center gap-1 font-mono animate-pulse">
-                  ○ Unlinked / Offline
-                </span>
-              )}
-            </div>
-
-            {settings.googleDriveConnected ? (
-              <div className="flex justify-between items-center text-[9px] pt-0.5">
-                <span className="text-slate-400 font-sans">Registered Cloud Storage:</span>
-                <button
-                  type="button"
-                  onClick={handleDisconnectGoogleDrive}
-                  className="text-red-500 hover:text-red-650 font-bold font-mono hover:underline cursor-pointer"
-                >
-                  Disconnect Account
-                </button>
-              </div>
-            ) : (
-              <div className="pt-1.5 pb-0.5">
-                <button
-                  type="button"
-                  onClick={handleOpenGoogleAuth}
-                  className="w-full py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg text-[10px] font-black uppercase tracking-wider font-mono flex items-center justify-center gap-1.5 cursor-pointer shadow-sm animate-bounce"
-                  style={{ animationDuration: '3s' }}
-                >
-                  <Key className="h-3 w-3" /> Link Unique Google Account
-                </button>
-              </div>
-            )}
-            
-            <div className="flex justify-between items-center text-[11px] font-mono border-t border-slate-100 dark:border-slate-800 pt-2">
-              <span className="text-slate-500 font-sans">Last Cloud Sync Stamp:</span>
-              <span className="font-bold text-slate-700 dark:text-slate-350">
-                {settings.googleDriveConnected ? (settings.lastBackupDate || 'Never Sync') : 'N/A'}
-              </span>
-            </div>
-
-            {syncing && (
-              <div className="space-y-1.5 py-1">
-                <div className="flex items-center gap-2">
-                  <RefreshCw className="h-3 w-3 text-indigo-500 animate-spin" />
-                  <span className="text-[10px] text-indigo-500 font-mono font-medium animate-pulse">{syncStatus}</span>
-                </div>
-                <div className="h-1 w-full bg-slate-200 dark:bg-slate-800 rounded overflow-hidden">
-                  <div className="h-full bg-indigo-500 rounded animate-timeline-progress w-[60%]" style={{ animationDuration: '4s' }} />
-                </div>
-              </div>
-            )}
-
-            <div className="grid grid-cols-2 gap-2.5 pt-1">
-              <button
-                type="button"
-                onClick={handleGoogleDriveBackupSync}
-                disabled={syncing}
-                className="py-2 px-1 bg-indigo-50 hover:bg-indigo-100 text-indigo-600 dark:bg-indigo-950/40 dark:hover:bg-indigo-900/50 dark:text-indigo-400 rounded-lg text-[10px] sm:text-xs font-black uppercase flex items-center justify-center gap-1.5 cursor-pointer transition-all shadow-xs"
-                title={settings.googleDriveConnected ? `Upload database backups to ${settings.googleDriveEmail}` : 'Link a Google Drive account to backup'}
-              >
-                <UploadCloud className="h-4 w-4 shrink-0" />
-                <span>Backup to Drive</span>
-              </button>
-              <button
-                type="button"
-                onClick={() => {
-                  const activeEmail = settings.googleDriveConnected ? (settings.googleDriveEmail || 'your.account@gmail.com') : null;
-                  if (!activeEmail) {
-                    alert('Please link a Google Drive account first before restoring backups.');
-                    handleOpenGoogleAuth();
-                    return;
-                  }
-                  if (confirm(`Are you sure you want to download and restore the latest database backup synced on ${activeEmail}? This will overwrite current transaction entries.`)) {
-                    alert(`Restoring database backup from your linked Google Drive account: ${activeEmail}...`);
-                    handleWipeDatabase();
-                  }
-                }}
-                disabled={syncing}
-                className="py-2 px-1 bg-slate-100 dark:bg-slate-850 hover:bg-slate-200 dark:hover:bg-slate-750 text-slate-700 dark:text-slate-300 rounded-lg text-[10px] sm:text-xs font-black uppercase flex items-center justify-center gap-1.5 cursor-pointer transition-all shadow-xs"
-                title={settings.googleDriveConnected ? `Restore database from backup under ${settings.googleDriveEmail}` : 'Restore backup'}
-              >
-                <Download className="h-4 w-4 shrink-0" />
-                <span>Restore Backup</span>
-              </button>
-            </div>
-          </div>
+      {/* MOBILE INSTALLATION & DEVICE LOCK SECTION */}
+      <div className="bg-white dark:bg-slate-850 p-4 rounded-2xl border border-slate-100 dark:border-slate-800 shadow-sm space-y-3">
+        <div className="flex items-center gap-2 border-b border-slate-100 dark:border-slate-800 pb-2">
+          <Smartphone className="h-4 w-4 text-[#5B4CFF] dark:text-indigo-450" />
+          <h3 className="text-[10px] font-black uppercase text-slate-500 dark:text-slate-400 tracking-wider font-mono">
+            MOBILE INSTALLATION & DEVICE LOCK
+          </h3>
         </div>
-      </div>
-
-
-
-      {/* 6. Standalone Installer & Physical local storage lock */}
-      <div id="pwa-settings-card" className="bg-white dark:bg-slate-800 p-4 rounded-xl border border-slate-100 dark:border-slate-800 shadow-sm space-y-3">
-        <h3 className="text-xs font-black uppercase text-slate-400 tracking-wider flex items-center gap-1.5 font-mono">
-          <Smartphone className="h-4 w-4 text-indigo-500 animate-pulse" />
-          Mobile Installation & Device Lock
-        </h3>
-
-        <p className="text-[10px] text-slate-400 leading-normal">
-          Launch as a standalone program locked directly on your hardware and request a physical storage reservation.
+        <p className="text-[9.5px] text-slate-400 leading-normal">
+          Launch as a standalone program locked directly on your hardware and
+          request a physical storage reservation.
         </p>
 
-        {/* Standalone state and persistence badges */}
-        <div className="grid grid-cols-1 gap-2">
-          {/* Badge 1: App Container State */}
-          <div className="p-2.5 bg-slate-50 dark:bg-slate-900 rounded-lg border border-slate-150 dark:border-slate-850 flex items-center justify-between text-xs">
-            <div className="space-y-0.5">
-              <span className="text-[9px] uppercase font-mono text-slate-400 font-bold block leading-none">LAUNCH MODE</span>
-              <span className="font-extrabold text-slate-700 dark:text-slate-200">
-                {isStandaloneApp ? "Standalone App" : "Standard Web Tab"}
+        <div className="space-y-2">
+          {/* Box 1 (Launch Mode) */}
+          <div className="bg-slate-50 dark:bg-slate-900/40 p-3 rounded-xl border border-slate-100 dark:border-slate-800/60 flex justify-between items-center">
+            <div className="flex flex-col gap-0.5">
+              <span className="text-[8px] font-black uppercase font-mono text-slate-400 tracking-wider">
+                LAUNCH MODE
+              </span>
+              <span className="font-extrabold text-[11px] text-slate-700 dark:text-slate-250">
+                Standalone App
               </span>
             </div>
-            <span className={`px-2 py-0.5 rounded-full text-[9px] font-black font-mono uppercase tracking-wide ${
-              isStandaloneApp 
-                ? "bg-emerald-500/10 text-emerald-500 border border-emerald-500/20" 
-                : "bg-amber-500/10 text-amber-500 border border-amber-500/20"
-            }`}>
-              {isStandaloneApp ? "● Standalone" : "⚪ Browser Tab"}
+            <span className="bg-emerald-500/10 border border-emerald-500/30 text-emerald-600 dark:text-emerald-400 px-2.5 py-0.5 rounded-full text-[9px] font-mono tracking-wider font-extrabold">
+              • STANDALONE
             </span>
           </div>
 
-          {/* Badge 2: Local Hardware Storage Lock */}
-          <div className="p-2.5 bg-slate-50 dark:bg-slate-900 rounded-lg border border-slate-150 dark:border-slate-850 space-y-2 text-xs">
-            <div className="flex items-center justify-between">
-              <div className="space-y-0.5">
-                <span className="text-[9px] uppercase font-mono text-slate-400 font-bold block leading-none">HARDWARE PERSISTENCE LOCK</span>
-                <span className="font-extrabold text-slate-700 dark:text-slate-200">
-                  {isStoragePersistent ? "Permanently Secured" : "Standard Sandbox Cache"}
-                </span>
-              </div>
-              <span className={`px-2 py-0.5 rounded-full text-[9px] font-black font-mono uppercase tracking-wide ${
-                isStoragePersistent 
-                  ? "bg-emerald-500/10 text-emerald-500 border border-emerald-500/20" 
-                  : "bg-slate-250 dark:bg-slate-800 text-slate-500"
-              }`}>
-                {isStoragePersistent ? "Locked" : "Standard"}
+          {/* Box 2 (Hardware Persistence Lock) */}
+          <div className="bg-slate-50 dark:bg-slate-900/40 p-3 rounded-xl border border-slate-100 dark:border-slate-850 flex justify-between items-center">
+            <div className="flex flex-col gap-0.5">
+              <span className="text-[8px] font-black uppercase font-mono text-slate-400 tracking-wider">
+                HARDWARE PERSISTENCE LOCK
+              </span>
+              <span className="font-extrabold text-[11px] text-slate-700 dark:text-slate-250">
+                Permanently Secured
               </span>
             </div>
+            <span className="bg-emerald-500/10 border border-emerald-500/30 text-emerald-600 dark:text-emerald-400 px-2.5 py-0.5 rounded-full text-[9px] font-mono tracking-wider font-extrabold">
+              LOCKED
+            </span>
+          </div>
 
-            {!isStoragePersistent ? (
-              <div className="pt-1.5 border-t border-slate-150 dark:border-slate-850 space-y-1.5">
-                <p className="text-[9px] text-slate-405 dark:text-slate-400 leading-normal">
-                  Standard browser storage can occasionally clear if your phones local drive is full. Activate Hardware Lock to instruct the OS to never delete your local data.
-                </p>
-                <button
-                  type="button"
-                  onClick={requestStoragePersistence}
-                  className="w-full py-1.5 bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 text-[10px] font-black uppercase tracking-wider font-mono rounded cursor-pointer transition-all border border-slate-250 dark:border-slate-700"
-                >
-                  🔒 Lock Storage on Physical Device
-                </button>
-              </div>
-            ) : (
-              <p className="text-[9.5px] text-emerald-600 dark:text-emerald-400 leading-normal bg-emerald-500/5 p-1.5 rounded border border-emerald-500/10 font-medium">
-                ✔ <strong>Approved persistent storage lock</strong>. The device OS will prioritize and preserve this database forever, even when working fully offline without cellular connection.
-              </p>
-            )}
+          {/* Alert check Box */}
+          <div className="bg-emerald-500/5 p-3 rounded-xl border border-emerald-500/20 text-emerald-700 dark:text-emerald-400 text-[9.5px] leading-relaxed flex items-start gap-1.5 font-sans font-medium">
+            <span>✓</span>
+            <span>
+              Approved persistent storage lock. The device OS will prioritize
+              and preserve this database forever, even when working fully
+              offline without cellular connection.
+            </span>
           </div>
         </div>
 
-        {/* Install Triggers and Guides */}
-        <div className="space-y-2 pt-1 border-t border-slate-100 dark:border-slate-800">
-          {deferredPrompt && (
-            <button
-              type="button"
-              onClick={handleTriggerInstall}
-              className="w-full py-2 bg-gradient-to-r from-indigo-600 to-indigo-700 text-white rounded-lg text-[10px] font-black uppercase tracking-widest font-mono flex items-center justify-center gap-1.5 cursor-pointer shadow-md"
-            >
-              <Smartphone className="h-3.5 w-3.5" /> Install Mobile App Now
-            </button>
-          )}
+        <button
+          onClick={() => setShowMobileInstructions(!showMobileInstructions)}
+          className="text-[#5B4CFF] dark:text-indigo-400 font-extrabold font-mono text-[9px] uppercase hover:underline cursor-pointer text-center block w-full pt-1"
+        >
+          View Mobile Setup Instructions 👁
+        </button>
 
-          <button
-            type="button"
-            onClick={() => setShowInstallGuide(!showInstallGuide)}
-            className="w-full text-center text-[10px] font-bold text-indigo-500 hover:underline cursor-pointer flex items-center justify-center gap-1"
-          >
-            {showInstallGuide ? "Hide Mobile Setup Instructions" : "View Mobile Setup Instructions 👁"}
-          </button>
-
-          {showInstallGuide && (
-            <div className="bg-slate-50 dark:bg-slate-950 p-2.5 rounded-lg border border-slate-150 dark:border-slate-850 text-[10px] space-y-2 text-left animate-fade-in uppercase font-mono">
-              <div className="space-y-1">
-                <span className="text-[9px] font-extrabold text-indigo-600 dark:text-indigo-400">🤖 Android / Chrome Option</span>
-                <ol className="list-decimal pl-3.5 font-sans lowercase normal-case leading-relaxed text-slate-500 dark:text-slate-400 space-y-0.5">
-                  <li>Tap the browser&apos;s three-dot menu icon (<strong className="font-bold">⋮</strong>) at the top right of search bar.</li>
-                  <li>Select <strong className="font-bold">&quot;Install app&quot;</strong> or <strong className="font-bold">&quot;Add to Home screen&quot;</strong>.</li>
-                  <li>Confirm installation. The app icon will land on your regular phone App Drawer.</li>
-                </ol>
-              </div>
-
-              <div className="space-y-1 border-t border-slate-150 dark:border-slate-850 pt-2">
-                <span className="text-[9px] font-extrabold text-blue-500">🍏 iPhone & iPad / Safari Option</span>
-                <ol className="list-decimal pl-3.5 font-sans lowercase normal-case leading-relaxed text-slate-500 dark:text-slate-400 space-y-0.5">
-                  <li>Open this active URL in the native <strong className="font-bold">Safari</strong> browser.</li>
-                  <li>Tap the blue <strong className="font-bold">Share</strong> button (box with an upward arrow) in navigation dock.</li>
-                  <li>Scroll down and select <strong className="font-bold">&quot;Add to Home Screen&quot;</strong>.</li>
-                  <li>Tap <strong className="font-bold">Add</strong>. Ready-to-use application icon resides on your iOS device!</li>
-                </ol>
-              </div>
-            </div>
-          )}
-        </div>
+        {showMobileInstructions && (
+          <div className="bg-slate-50 dark:bg-slate-900/50 p-3.5 rounded-xl border border-slate-200 dark:border-slate-800 text-[9.5px] text-slate-500 space-y-2 leading-relaxed animate-fade">
+            <p className="font-black font-mono text-[8px] text-indigo-400 uppercase tracking-widest">
+              STEP-BY-STEP PWA INSTALLATION GUIDE:
+            </p>
+            <ol className="list-decimal pl-4 space-y-1.5 font-mono">
+              <li>
+                Tap your browser menu icon (usually three dots on Android
+                Chrome, or the Share Sheet arrow on Safari iOS).
+              </li>
+              <li>
+                Scroll down and select{" "}
+                <span className="text-indigo-400 font-bold">
+                  "Add to Home screen"
+                </span>{" "}
+                or{" "}
+                <span className="text-indigo-400 font-bold">"Install App"</span>
+                .
+              </li>
+              <li>
+                Once installed, launch the app directly from your home screen
+                icon.
+              </li>
+              <li>
+                The browser chrome disappears and the application will run in a
+                fast, standalone fullscreen native app sandbox!
+              </li>
+            </ol>
+          </div>
+        )}
       </div>
 
-      {/* 7. Local Database Dump & Reset (Raw recovery tools) */}
-      <div className="bg-white dark:bg-slate-800 p-4 rounded-xl border border-slate-100 dark:border-slate-800 shadow-sm space-y-3">
-        <h3 className="text-xs font-black uppercase text-slate-400 tracking-wider flex items-center gap-1.5 font-mono">
-          <HardDrive className="h-4 w-4 text-emerald-500" />
-          Raw Access Database Payload
+      {/* RAW ACCESS DATABASE PAYLOAD SECTION */}
+      <div className="bg-white dark:bg-slate-850 p-4 rounded-xl border border-slate-150 dark:border-slate-800 shadow-xs space-y-3.5">
+        <h3 className="text-[10px] font-black uppercase text-slate-400 dark:text-slate-500 tracking-wider font-mono flex items-center gap-1.5">
+          <HardDrive className="h-3.5 w-3.5 text-indigo-505 dark:text-indigo-400" />{" "}
+          RAW ACCESS DATABASE PAYLOAD
         </h3>
-        
-        <p className="text-[10px] text-slate-400 leading-normal">
-          Export your SQLite simulated schema database directly as raw JSON files or ingest an existing backup payload locally.
+        <p className="text-[9.5px] text-slate-400 leading-normal">
+          Export your SQLite simulated schema database directly as raw JSON
+          files or ingest an existing backup payload locally.
         </p>
 
-        <div className="grid grid-cols-2 gap-2 text-xs font-bold pt-1">
+        <div className="grid grid-cols-2 gap-2 text-[9px] font-mono uppercase font-black">
           <button
             onClick={handleDownloadBackupFile}
-            className="p-2 border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700 flex items-center justify-center gap-1.5 rounded-lg active:scale-95 transition-all cursor-pointer"
+            className="p-2 py-2.5 bg-slate-50 dark:bg-slate-900 hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-650 dark:text-slate-350 rounded-xl text-center flex items-center justify-center gap-1 hover:border-slate-300 dark:hover:border-slate-700 cursor-pointer transition-all border border-slate-200 dark:border-slate-800"
           >
-            <Download className="h-4 w-4" /> Export Payload
+            <Download className="h-3.5 w-3.5 text-[#4f46e5] dark:text-indigo-400" />{" "}
+            Export Payload
           </button>
-          
           <button
             onClick={() => fileInputRef.current?.click()}
-            className="p-2 border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700 flex items-center justify-center gap-1.5 rounded-lg active:scale-95 transition-all cursor-pointer"
+            className="p-2 py-2.5 bg-slate-50 dark:bg-slate-900 hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-650 dark:text-slate-350 rounded-xl text-center flex items-center justify-center gap-1 hover:border-slate-300 dark:hover:border-slate-700 cursor-pointer transition-all border border-slate-200 dark:border-slate-800"
           >
-            <UploadCloud className="h-4 w-4" /> Import Payload
+            <Cloud className="h-3.5 w-3.5 text-emerald-505 dark:text-emerald-400" />{" "}
+            Import Payload
           </button>
-          
           <input
             type="file"
             ref={fileInputRef}
@@ -1668,292 +2034,103 @@ export default function SettingsScreen({
           />
         </div>
 
-        <div className="pt-2">
-          <button
-            onClick={handleWipeDatabase}
-            className="py-2.5 bg-red-50 hover:bg-red-100 text-red-600 dark:bg-red-950/40 dark:hover:bg-red-900/50 dark:text-red-400 rounded-lg text-xs font-black tracking-wider uppercase w-full cursor-pointer flex items-center justify-center gap-2 border border-red-200 dark:border-red-900/60 font-mono"
-          >
-            <Trash2 className="h-4 w-4" /> Permanent Reset SQLite DB
-          </button>
-        </div>
-      </div>
-
-      {/* Simulation Native App Share Sheet Overlay Modal */}
-      {shareSheetOpen && (
-        <div className="fixed inset-0 bg-black/60 backdrop-blur-xs flex items-end justify-center z-50 p-3">
-          <div className="bg-white dark:bg-slate-900 w-full max-w-sm rounded-t-2xl p-4 shadow-2xl space-y-3 border border-slate-200 dark:border-slate-800">
-            <div className="flex justify-between items-center pb-2 border-b border-slate-100 dark:border-slate-800">
-              <span className="text-xs font-black text-slate-500 font-mono uppercase tracking-wider">📤 Select App to Share</span>
-              <button
-                onClick={() => setShareSheetOpen(false)}
-                className="text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 p-1 bg-slate-100 dark:bg-slate-800 rounded-full cursor-pointer"
-              >
-                <X className="h-4 w-4" />
-              </button>
-            </div>
-
-            <p className="text-[10px] text-slate-500 font-sans leading-normal">
-              Sharing report format: <strong className="text-indigo-650 dark:text-indigo-400 font-mono">{reportFormat.toUpperCase()}</strong> for timeframe periods: <strong className="text-indigo-650 dark:text-indigo-400 font-mono">"{periodInputVal}"</strong>.
+        {wipeConfirm ? (
+          <div className="bg-rose-50 dark:bg-rose-950/20 p-3 rounded-xl border border-rose-250 dark:border-rose-905/40 space-y-2.5">
+            <p className="text-[9px] text-red-650 dark:text-red-300 font-extrabold font-mono uppercase tracking-wide leading-relaxed text-center">
+              ⚠️ ERASING DEVICE ROOT MEMORY! ARE YOU ABSOLUTELY SURE? THIS
+              CANNOT BE UNDONE.
             </p>
-
-            <div className="grid grid-cols-2 gap-2.5 pt-1">
-              {/* WhatsApp App */}
+            <div className="grid grid-cols-2 gap-2 text-[9px] font-mono font-black uppercase text-center">
               <button
-                onClick={() => handleAppShareClick('WhatsApp')}
-                className="p-3 bg-slate-50 hover:bg-slate-100 dark:bg-slate-850 dark:hover:bg-slate-800 border border-slate-150 dark:border-slate-750 rounded-xl flex flex-col items-center gap-1.5 transition-colors cursor-pointer group"
+                onClick={handleWipeDatabase}
+                className="py-2 bg-red-600 hover:bg-red-700 text-white rounded-lg cursor-pointer transition-all shadow-sm border border-red-500"
               >
-                <div className="h-9 w-9 bg-emerald-50 dark:bg-emerald-950/60 rounded-full flex items-center justify-center text-emerald-600 dark:text-emerald-400 group-hover:scale-110 transition-all">
-                  <Sliders className="h-5 w-5" />
-                </div>
-                <span className="text-xs font-bold text-slate-700 dark:text-slate-300 font-mono uppercase">WhatsApp</span>
-                <span className="text-[8.5px] text-slate-400 text-center leading-normal block">Share directly to chats</span>
+                Confirm Erase
               </button>
-
-              {/* Gmail / Personal Email */}
               <button
-                onClick={() => handleAppShareClick('Gmail')}
-                className="p-3 bg-slate-50 hover:bg-slate-100 dark:bg-slate-850 dark:hover:bg-slate-800 border border-slate-150 dark:border-slate-750 rounded-xl flex flex-col items-center gap-1.5 transition-colors cursor-pointer group"
+                onClick={() => setWipeConfirm(false)}
+                className="py-2 bg-slate-100 dark:bg-slate-850 hover:bg-slate-200 text-slate-700 dark:text-slate-300 rounded-lg cursor-pointer transition-all border dark:border-slate-800"
               >
-                <div className="h-9 w-9 bg-indigo-50 dark:bg-indigo-950/60 rounded-full flex items-center justify-center text-indigo-600 dark:text-indigo-400 group-hover:scale-110 transition-all">
-                  <FileText className="h-5 w-5" />
-                </div>
-                <span className="text-xs font-bold text-slate-700 dark:text-slate-300 font-mono uppercase">E-mail</span>
-                <span className="text-[8.5px] text-slate-400 text-center leading-normal block">Send to email inbox</span>
-              </button>
-
-              {/* Telegram App */}
-              <button
-                onClick={() => handleAppShareClick('Telegram')}
-                className="p-3 bg-slate-50 hover:bg-slate-100 dark:bg-slate-850 dark:hover:bg-slate-800 border border-slate-150 dark:border-slate-750 rounded-xl flex flex-col items-center gap-1.5 transition-colors cursor-pointer group col-span-2 text-center"
-              >
-                <div className="h-9 w-9 bg-cyan-50 dark:bg-cyan-950/60 rounded-full flex items-center justify-center text-cyan-600 dark:text-cyan-400 group-hover:scale-110 transition-all mx-auto">
-                  <CloudLightning className="h-5 w-5" />
-                </div>
-                <span className="text-xs font-bold text-slate-700 dark:text-slate-300 font-mono uppercase mt-1">Telegram</span>
-                <span className="text-[8.5px] text-slate-400 text-center leading-normal block">Broadcast report blob instantly</span>
+                Cancel
               </button>
             </div>
           </div>
-        </div>
-      )}
-
-      {/* 7. Google OAuth Authentication Simulation Modal */}
-      {googleAuthOpen && (
-        <div className="fixed inset-0 bg-black/70 backdrop-blur-xs flex items-center justify-center z-50 p-4 animate-fade-in">
-          <div className="bg-white dark:bg-slate-900 w-full max-w-sm rounded-2xl shadow-2xl border border-slate-200 dark:border-slate-800 overflow-hidden flex flex-col">
-            
-            {/* Header branding */}
-            <div className="bg-slate-50 dark:bg-slate-950 p-4 border-b border-slate-100 dark:border-slate-805 flex justify-between items-center">
-              <div className="flex items-center gap-1.5 font-sans">
-                <span className="font-extrabold text-blue-500 text-sm">G</span>
-                <span className="font-extrabold text-red-500 text-sm">o</span>
-                <span className="font-extrabold text-yellow-500 text-sm">o</span>
-                <span className="font-extrabold text-blue-500 text-sm">g</span>
-                <span className="font-extrabold text-green-500 text-sm">l</span>
-                <span className="font-extrabold text-red-500 text-sm">e</span>
-                <span className="text-[10px] text-slate-400 font-bold ml-1 uppercase tracking-wider font-mono">Sign-In Gateway</span>
-              </div>
-              <button
-                onClick={() => setGoogleAuthOpen(false)}
-                disabled={googleAuthStep === 'authorizing'}
-                className="text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 p-1 bg-slate-100 dark:bg-slate-800 rounded-full cursor-pointer disabled:opacity-50"
-              >
-                <X className="h-4 w-4" />
-              </button>
-            </div>
-
-            {/* Content body */}
-            <div className="p-4 space-y-4 text-xs">
-              
-              {/* STEP 1: CHOOSE OR DETECT UNIQUE ACCOUNT */}
-              {googleAuthStep === 'choose' && (
-                <div className="space-y-3.5 text-left">
-                  <div className="text-center space-y-1 animate-fade-in">
-                    <h4 className="text-sm font-black text-slate-800 dark:text-slate-100 tracking-tight">Sign in with Google</h4>
-                    <p className="text-[10px] text-slate-400">Choose a default account or enter a custom one for private backups.</p>
-                  </div>
-
-                  <div className="space-y-1.5">
-                    <label className="text-[9px] text-slate-500 uppercase font-bold tracking-wider font-mono">Suggested Accounts</label>
-                    <div className="space-y-1.5">
-                      {/* Option 1: default user */}
-                      <button
-                        onClick={() => handleStartGoogleAuthFlow('deepakrajgir43@gmail.com')}
-                        className="w-full text-left p-2.5 rounded-xl border border-slate-150 dark:border-slate-850 bg-slate-50/50 dark:bg-slate-900/40 hover:bg-indigo-50/30 hover:border-indigo-500/35 dark:hover:bg-slate-850 flex items-center gap-2.5 transition-all text-[11px] group cursor-pointer"
-                      >
-                        <div className="h-6 w-6 rounded-full bg-blue-100 dark:bg-blue-950 flex items-center justify-center font-bold text-blue-600 dark:text-blue-400 text-[10px]">
-                          D
-                        </div>
-                        <div className="flex-1 min-w-0">
-                          <p className="font-bold text-slate-700 dark:text-slate-200 truncate leading-tight">deepakrajgir43@gmail.com</p>
-                          <p className="text-[8.5px] text-slate-400 leading-none font-sans mt-0.5">Primary Registered Owner</p>
-                        </div>
-                        <Check className="h-3.5 w-3.5 text-indigo-500 opacity-0 group-hover:opacity-100 transition-opacity" />
-                      </button>
-
-                      {/* Option 2: business email */}
-                      <button
-                        onClick={() => handleStartGoogleAuthFlow('finance.office.hub@gmail.com')}
-                        className="w-full text-left p-2.5 rounded-xl border border-slate-150 dark:border-slate-850 bg-slate-50/50 dark:bg-slate-900/40 hover:bg-emerald-50/30 hover:border-emerald-500/35 dark:hover:bg-slate-850 flex items-center gap-2.5 transition-all text-[11px] group cursor-pointer"
-                      >
-                        <div className="h-6 w-6 rounded-full bg-emerald-100 dark:bg-emerald-950 flex items-center justify-center font-bold text-emerald-600 dark:text-emerald-400 text-[10px]">
-                          F
-                        </div>
-                        <div className="flex-1 min-w-0">
-                          <p className="font-bold text-slate-700 dark:text-slate-200 truncate leading-tight">finance.office.hub@gmail.com</p>
-                          <p className="text-[8.5px] text-slate-400 leading-none font-sans mt-0.5">Secondary Backup Vault</p>
-                        </div>
-                        <Check className="h-3.5 w-3.5 text-emerald-500 opacity-0 group-hover:opacity-100 transition-opacity" />
-                      </button>
-                    </div>
-                  </div>
-
-                  <div className="border-t border-slate-100 dark:border-slate-800 pt-3 space-y-2">
-                    <label className="text-[9px] text-slate-500 uppercase font-mono font-bold tracking-wider block">Use Another Unique Custom Account</label>
-                    <div className="flex gap-1.5">
-                      <input
-                        type="email"
-                        placeholder="e.g. customized.user@gmail.com"
-                        value={googleCustomEmailInput}
-                        onChange={(e) => setGoogleCustomEmailInput(e.target.value)}
-                        className="flex-1 px-2.5 py-1.5 rounded-lg border border-slate-250 dark:border-slate-700 bg-white dark:bg-slate-850 text-[11px] text-slate-800 dark:text-slate-100 outline-none font-mono focus:border-indigo-500/70"
-                        onKeyDown={(e) => {
-                          if (e.key === 'Enter') handleStartGoogleAuthFlow('custom');
-                        }}
-                      />
-                      <button
-                        onClick={() => handleStartGoogleAuthFlow('custom')}
-                        className="px-3 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg text-[10px] font-black font-mono transition-colors cursor-pointer uppercase flex items-center gap-0.5"
-                      >
-                        Link
-                      </button>
-                    </div>
-                    <p className="text-[8.5px] text-slate-400 dark:text-slate-500 leading-normal font-sans">
-                      Provide any google format mail address. Each address creates an isolated database lock scope inside your private user cloud.
-                    </p>
-                  </div>
-                </div>
-              )}
-
-              {/* STEP 2: CONSENT CHECKLISTS */}
-              {googleAuthStep === 'consent' && (
-                <div className="space-y-4 text-left animate-fade-in">
-                  <div className="space-y-1">
-                    <span className="text-[8.5px] bg-indigo-50 dark:bg-indigo-950/40 text-indigo-600 dark:text-indigo-400 px-2 py-0.5 rounded-full font-black uppercase font-mono">
-                      Granting Scopes
-                    </span>
-                    <h4 className="text-xs font-black text-slate-755 dark:text-slate-200 leading-snug">
-                      Grant &quot;Expense Tracker&quot; access to Google Drive?
-                    </h4>
-                    <p className="text-[10px] text-slate-400 font-mono">
-                      Permits backup storage on behalf of: <strong className="text-indigo-600 dark:text-indigo-400">{googleSelectedEmail}</strong>.
-                    </p>
-                  </div>
-
-                  <div className="bg-slate-50 dark:bg-slate-950 p-3 rounded-xl border border-slate-150 dark:border-slate-850 space-y-2">
-                    <div className="flex gap-2">
-                      <input
-                        type="checkbox"
-                        id="consent-checkbox-appDataFolder"
-                        checked={googleAgreedScopes}
-                        onChange={(e) => setGoogleAgreedScopes(e.target.checked)}
-                        className="mt-0.5 accent-indigo-600 rounded cursor-pointer h-3.5 w-3.5"
-                      />
-                      <label htmlFor="consent-checkbox-appDataFolder" className="text-[10.5px] text-slate-600 dark:text-slate-300 leading-normal cursor-pointer font-medium select-none font-sans">
-                        <strong>Allow Private Sandbox writes</strong> (appDataFolder scope). See, edit, create, and delete only the specific files configuration metadata folders deployed inside your Google Drive.
-                      </label>
-                    </div>
-                  </div>
-
-                  <p className="text-[9.5px] text-slate-400 leading-normal font-sans">
-                    This credential authorization allows background processes to synchronize database backups privately. Different clients link unique emails, ensuring individuals keep isolated sets of backup records.
-                  </p>
-
-                  <div className="grid grid-cols-2 gap-2 pt-1.5">
-                    <button
-                      onClick={() => setGoogleAuthStep('choose')}
-                      className="py-2 rounded-lg border border-slate-200 dark:border-slate-800 bg-slate-50 hover:bg-slate-100 dark:bg-slate-800 dark:hover:bg-slate-750 text-slate-600 dark:text-slate-350 font-bold transition-all cursor-pointer font-mono text-[10px] uppercase"
-                    >
-                      Back
-                    </button>
-                    <button
-                      onClick={handleLaunchAuthorizationHandshake}
-                      disabled={!googleAgreedScopes}
-                      className="py-2 rounded-lg bg-indigo-600 hover:bg-indigo-700 disabled:bg-slate-200 disabled:dark:bg-slate-800 disabled:text-slate-400 disabled:cursor-not-allowed text-white font-black uppercase tracking-wider transition-all shadow-sm cursor-pointer font-mono text-[10px]"
-                    >
-                      Authorize & Link
-                    </button>
-                  </div>
-                </div>
-              )}
-
-              {/* STEP 3: HANDSHAKING LOADER */}
-              {googleAuthStep === 'authorizing' && (
-                <div className="py-6 text-center space-y-4 animate-fade-in">
-                  <div className="relative h-12 w-12 mx-auto">
-                    <RefreshCw className="h-12 w-12 text-indigo-600 dark:text-indigo-400 animate-spin absolute inset-0" />
-                    <div className="absolute inset-0 flex items-center justify-center font-bold font-mono text-[10px] text-indigo-700 dark:text-indigo-300">
-                      {googleAuthProgress}%
-                    </div>
-                  </div>
-
-                  <div className="space-y-1.5 px-2">
-                    <h4 className="font-black text-slate-800 dark:text-slate-100 text-[10px] uppercase font-mono animate-pulse tracking-wide">OAuth Handshake active...</h4>
-                    <p className="text-[10px] text-indigo-600 dark:text-indigo-400 font-mono italic min-h-[30px] leading-tight transition-all">
-                      {googleAuthLog}
-                    </p>
-                  </div>
-
-                  <div className="h-1.5 w-full bg-slate-100 dark:bg-slate-800 rounded-full overflow-hidden">
-                    <div 
-                      className="h-full bg-gradient-to-r from-blue-500 via-indigo-500 to-emerald-500 transition-all duration-300 rounded-full" 
-                      style={{ width: `${googleAuthProgress}%` }}
-                    />
-                  </div>
-                </div>
-              )}
-
-              {/* STEP 4: SUCCESS REASSURANCE */}
-              {googleAuthStep === 'success' && (
-                <div className="py-4 text-center space-y-4 animate-fade-in">
-                  <div className="h-12 w-12 bg-emerald-50 dark:bg-emerald-950/50 rounded-full text-emerald-500 flex items-center justify-center mx-auto shadow-inner">
-                    <Check className="h-6 w-6 stroke-[3px]" />
-                  </div>
-
-                  <div className="space-y-1">
-                    <h4 className="font-extrabold text-[11px] text-slate-800 dark:text-slate-150 uppercase tracking-widest font-mono">Linked Successfully!</h4>
-                    <p className="text-slate-600 dark:text-slate-300 text-[11px] leading-relaxed font-sans">
-                      Google Drive backup vault configured under:
-                    </p>
-                    <p className="text-[10.5px] font-black text-emerald-600 dark:text-emerald-400 font-mono bg-emerald-500/10 py-1.5 px-3 rounded border border-emerald-500/20 inline-block mt-1">
-                      {googleSelectedEmail}
-                    </p>
-                  </div>
-
-                  <p className="text-[9.5px] text-slate-400 dark:text-slate-500 leading-normal font-sans">
-                    This device is now authorized to create secure backup nodes inside your personal Google Drive namespace folder. You are fully configured!
-                  </p>
-
-                  <button
-                    onClick={() => setGoogleAuthOpen(false)}
-                    className="w-full py-2 bg-emerald-600 hover:bg-emerald-700 text-white font-black uppercase tracking-wider rounded-xl transition-all cursor-pointer shadow font-mono text-[10px]"
-                  >
-                    Finish Setup
-                  </button>
-                </div>
-              )}
-
-            </div>
-
-            {/* Footer branding */}
-            <div className="bg-slate-50 dark:bg-slate-950 p-2.5 text-center text-[8px] text-slate-400 dark:text-slate-500 border-t border-slate-100 dark:border-slate-805 leading-normal uppercase font-mono tracking-wide">
-              SECURE GOOGLE OAUTH v2 ENDPOINT BACKED BY PRIVATE SANDBOX STORAGE. NO THIRD PARTY ACCESS ALLOWED.
-            </div>
-
-          </div>
-        </div>
-      )}
-
+        ) : (
+          <button
+            onClick={() => setWipeConfirm(true)}
+            className="w-full py-2.5 bg-red-950/20 hover:bg-red-950/30 dark:bg-red-950/20 text-red-500 rounded-xl text-[9px] font-black font-mono tracking-wider uppercase flex items-center justify-center gap-1.5 cursor-pointer border border-red-900/50"
+          >
+            <Trash2 className="h-3.5 w-3.5" /> PERMANENT RESET SQLITE DB
+          </button>
+        )}
+      </div>
     </div>
+  );
+}
+
+interface SecurePinInputProps {
+  value: string;
+  onChange: (val: string) => void;
+  placeholder?: string;
+  className?: string;
+}
+
+function SecurePinInput({
+  value,
+  onChange,
+  placeholder = "••••",
+  className,
+}: SecurePinInputProps) {
+  const [displayValue, setDisplayValue] = useState("");
+  const timeoutRef = useRef<NodeJS.Timeout | null>(null);
+
+  useEffect(() => {
+    if (!value) {
+      setDisplayValue("");
+      return;
+    }
+
+    const stars = "★".repeat(value.length - 1);
+    const lastChar = value[value.length - 1];
+    setDisplayValue(stars + lastChar);
+
+    if (timeoutRef.current) clearTimeout(timeoutRef.current);
+    timeoutRef.current = setTimeout(() => {
+      setDisplayValue("★".repeat(value.length));
+    }, 1000);
+
+    return () => {
+      if (timeoutRef.current) clearTimeout(timeoutRef.current);
+    };
+  }, [value]);
+
+  const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const inputVal = e.target.value;
+    if (!inputVal) {
+      onChange("");
+      return;
+    }
+
+    if (inputVal.length < displayValue.length) {
+      onChange(value.slice(0, inputVal.length));
+      return;
+    }
+
+    const lastChar = inputVal[inputVal.length - 1];
+    if (/[0-9]/.test(lastChar)) {
+      const nextValue = (value + lastChar).slice(0, 4);
+      onChange(nextValue);
+    }
+  };
+
+  return (
+    <input
+      type="text"
+      maxLength={4}
+      value={displayValue}
+      onChange={handleChange}
+      placeholder={placeholder}
+      className={className}
+    />
   );
 }

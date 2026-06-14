@@ -24,6 +24,20 @@ export default function PinScreen({ settings, onUnlock, onSetPin }: PinScreenPro
   const [customHint, setCustomHint] = useState<string>('');
   const [customName, setCustomName] = useState<string>(settings.userName || '');
 
+  const [lastTypedIndex, setLastTypedIndex] = useState<number | null>(null);
+
+  useEffect(() => {
+    if (pinInput.length > 0) {
+      setLastTypedIndex(pinInput.length - 1);
+      const timer = setTimeout(() => {
+        setLastTypedIndex(null);
+      }, 1000);
+      return () => clearTimeout(timer);
+    } else {
+      setLastTypedIndex(null);
+    }
+  }, [pinInput.length]);
+
   useEffect(() => {
     // If PIN is loaded empty, trigger setup mode automatically
     if (!settings.isPinSet || settings.pin === '') {
@@ -189,16 +203,22 @@ export default function PinScreen({ settings, onUnlock, onSetPin }: PinScreenPro
           {/* Code Entry dots indicator */}
           <div className="flex flex-col items-center my-6">
             <div className="flex gap-4 justify-center items-center h-8">
-              {[0, 1, 2, 3].map(index => (
-                <div
-                  key={index}
-                  className={`h-4 w-4 rounded-full border-2 transition-all duration-250 ${
-                    index < pinInput.length
-                      ? 'bg-indigo-600 border-indigo-600 scale-125 shadow'
-                      : 'bg-transparent border-slate-300 dark:border-slate-700'
-                  }`}
-                />
-              ))}
+              {[0, 1, 2, 3].map(index => {
+                const isFilled = index < pinInput.length;
+                const isRevealed = lastTypedIndex === index;
+                return (
+                  <div
+                    key={index}
+                    className={`h-8 w-8 rounded-full border-2 transition-all duration-200 flex items-center justify-center text-xs font-black font-mono ${
+                      isFilled
+                        ? 'bg-indigo-600 border-indigo-600 text-white scale-110 shadow'
+                        : 'bg-transparent border-slate-300 dark:border-slate-700 text-transparent'
+                    }`}
+                  >
+                    {isRevealed && isFilled ? pinInput[index] : isFilled ? '★' : ''}
+                  </div>
+                );
+              })}
             </div>
             
             {/* Quick Hint Option for development testing */}

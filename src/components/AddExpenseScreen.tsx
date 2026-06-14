@@ -6,7 +6,7 @@
 import React, { useState, useMemo, useEffect } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { 
-  Calendar, 
+  Calendar as CalIcon, 
   IndianRupee, 
   Plus, 
   Trash2, 
@@ -23,15 +23,23 @@ import {
   CreditCard,
   LogOut,
   Notebook,
-  ChevronDown
+  ChevronDown,
+  ArrowRightLeft,
+  DollarSign,
+  User,
+  Clock,
+  Briefcase,
+  Layers,
+  X
 } from 'lucide-react';
-import { VirtualExpense, VirtualCategory, VirtualBudget, AppSettings } from '../types';
+import { VirtualExpense, VirtualCategory, VirtualBudget, AppSettings, TransactionType, MoneySource } from '../types';
 import { DbSim } from '../dbSim';
 
 interface AddExpenseScreenProps {
   expenses: VirtualExpense[];
   categories: VirtualCategory[];
   budgets: VirtualBudget[];
+  moneySources: MoneySource[];
   onAddExpense: (exp: VirtualExpense) => void;
   onUpdateExpense: (exp: VirtualExpense) => void;
   onDeleteExpense: (id: string) => void;
@@ -48,6 +56,7 @@ export default function AddExpenseScreen({
   expenses,
   categories,
   budgets,
+  moneySources,
   onAddExpense,
   onUpdateExpense,
   onDeleteExpense,
@@ -59,62 +68,132 @@ export default function AddExpenseScreen({
   onUpdateCategories,
   onLockApp
 }: AddExpenseScreenProps) {
+  const currencySymbol = settings.currency || '₹';
+
+  const getSourceAccountNameFromId = (id?: string) => {
+    if (!id) return '';
+    const sourceObj = moneySources.find(s => s.id === id);
+    return sourceObj ? sourceObj.name : '';
+  };
+
+  // State: Selected Transaction Type
+  const [transactionType, setTransactionType] = useState<'Expense' | 'Income' | 'LoanGiven' | 'LoanTaken' | 'Transfer'>('Expense');
+
   // Form States
   const [editingId, setEditingId] = useState<string | null>(null);
   const [date, setDate] = useState<string>(new Date().toISOString().substring(0, 10));
   const [amount, setAmount] = useState<string>('');
-  // Force clean unselected fields by default to prevent preselection
   const [selectedCat, setSelectedCat] = useState<string>('');
   const [selectedSubcat, setSelectedSubcat] = useState<string>('');
   const [notes, setNotes] = useState<string>('');
+  const [personName, setPersonName] = useState<string>('');
   const [paymentMode, setPaymentMode] = useState<'Cash' | 'UPI' | 'Credit Card' | 'Debit Card' | 'Bank Transfer'>('Cash');
+  const [sourceAccountId, setSourceAccountId] = useState<string>('source_cash');
+  const [fromSourceAccountId, setFromSourceAccountId] = useState<string>('source_bank');
+  const [toSourceAccountId, setToSourceAccountId] = useState<string>('source_cash');
+  
+  // Recurring Sub-options section state
+  const [isRecurring, setIsRecurring] = useState<boolean>(false);
+  const [recurringFreq, setRecurringFreq] = useState<'Daily' | 'Weekly' | 'Monthly' | 'Yearly'>('Monthly');
+
+  // Subcategory management state
   const [isAddingSub, setIsAddingSub] = useState<boolean>(false);
   const [newSubcatInputVal, setNewSubcatInputVal] = useState<string>('');
 
-  // New Category / Subcategory Creation Drawer State
+  // Category creator drawer states
   const [showCatCreator, setShowCatCreator] = useState<boolean>(false);
   const [newCatName, setNewCatName] = useState<string>('');
   const [newSubcatName, setNewSubcatName] = useState<string>('');
   const [newCatBudget, setNewCatBudget] = useState<string>('5000');
   const [newCatThreshold, setNewCatThreshold] = useState<number>(80);
+  const [newCatType, setNewCatType] = useState<'expense' | 'income'>('expense');
 
-  // Success Confirmation and ledger popup detail states
+  // Toast confirm indicators
   const [showSuccessToast, setShowSuccessToast] = useState<string | null>(null);
   const [selectedDetailExpense, setSelectedDetailExpense] = useState<VirtualExpense | null>(null);
+  const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
 
-  // Search & Filter States
+  // Search & Filter state variables
   const [searchQuery, setSearchQuery] = useState<string>('');
+  const [filterType, setFilterType] = useState<string>('All');
   const [filterMonth, setFilterMonth] = useState<string>('All');
   const [filterYear, setFilterYear] = useState<string>('All');
   const [filterCategory, setFilterCategory] = useState<string>('All');
   const [filterPaymentMode, setFilterPaymentMode] = useState<string>('All');
+  const [filterPerson, setFilterPerson] = useState<string>('');
+  const [filterMinAmount, setFilterMinAmount] = useState<string>('');
+  const [filterMaxAmount, setFilterMaxAmount] = useState<string>('');
+  const [filterStartDate, setFilterStartDate] = useState<string>('');
+  const [filterEndDate, setFilterEndDate] = useState<string>('');
   const [isFilterOpen, setIsFilterOpen] = useState<boolean>(false);
 
-  // No automatic preselection logic on mount or categories update
-  // Users will choose manually instead
+  // Dynamic category options filtered by transaction type
+  const activeCategoriesOptions = useMemo(() => {
+    if (transactionType === 'Expense' || transactionType === 'LoanGiven') {
+      return categories.filter(c => !c.type || c.type === 'expense');
+    } else if (transactionType === 'Income' || transactionType === 'LoanTaken') {
+      return categories.filter(c => c.type === 'income');
+    } else {
+      // Transfer or others
+      return categories;
+    }
+  }, [categories, transactionType]);
 
-  // Dependent subcategories options list
+  // Subcategory options based on selectedCategory
   const subcategoryOptions = useMemo(() => {
     if (!selectedCat) return [];
     const catObj = categories.find(c => c.name.toLowerCase() === selectedCat.toLowerCase());
     return catObj ? catObj.subcategories : [];
   }, [selectedCat, categories]);
 
-  // Form Reset helper
+  // Auto assign first logical category on type shift to prevent blank screen selections
+  useEffect(() => {
+    if (!editingId) {
+      if (activeCategoriesOptions.length > 0) {
+        setSelectedCat(activeCategoriesOptions[0].name);
+        if (activeCategoriesOptions[0].subcategories.length > 0) {
+          setSelectedSubcat(activeCategoriesOptions[0].subcategories[0]);
+        } else {
+          setSelectedSubcat('');
+        }
+      } else {
+        setSelectedCat('');
+        setSelectedSubcat('');
+      }
+    }
+  }, [transactionType, activeCategoriesOptions, editingId]);
+
+  // Adjust subcategories if category changes
+  const handleCategorySelect = (catName: string) => {
+    setSelectedCat(catName);
+    const catObj = categories.find(c => c.name.toLowerCase() === catName.toLowerCase());
+    if (catObj && catObj.subcategories.length > 0) {
+      setSelectedSubcat(catObj.subcategories[0]);
+    } else {
+      setSelectedSubcat('');
+    }
+  };
+
+  // Form reset procedure helper
   const resetForm = () => {
     setEditingId(null);
     setDate(new Date().toISOString().substring(0, 10));
     setAmount('');
-    setSelectedCat('');
-    setSelectedSubcat('');
     setNotes('');
+    setPersonName('');
     setPaymentMode('Cash');
+    setSourceAccountId('source_cash');
+    setFromSourceAccountId('source_bank');
+    setToSourceAccountId('source_cash');
+    setIsRecurring(false);
+    setRecurringFreq('Monthly');
     setIsAddingSub(false);
     setNewSubcatInputVal('');
   };
 
-  // Check budget limits helper and trigger popup message & state mutation
+  // Budget validation alerts
   const executeBudgetVerification = (catName: string, expenseAmount: number) => {
+    if (transactionType !== 'Expense') return; // only Expense triggers budget caps
     const alerts = DbSim.checkBudgetAlerts(catName, expenseAmount);
     if (alerts && alerts.length > 0) {
       alerts.forEach(alertResult => {
@@ -125,873 +204,1096 @@ export default function AddExpenseScreen({
     }
   };
 
-  // Submit Handler
+  // Submission handler
   const handleSave = () => {
     if (!amount || isNaN(parseFloat(amount)) || parseFloat(amount) <= 0) {
       alert('Please fill out a valid amount');
       return;
     }
-    if (!selectedCat || selectedCat === '') {
-      alert('Please select a category');
-      return;
-    }
-    if (!selectedSubcat || selectedSubcat === '') {
-      alert('Please select a subcategory');
+
+    // Checking required person name for Loan/Transfer types
+    const needsPersonName = transactionType === 'LoanGiven' || transactionType === 'LoanTaken' || transactionType === 'Transfer';
+    if (needsPersonName && !personName.trim()) {
+      alert(`Please input a Name/Institution for this ${transactionType} transaction.`);
       return;
     }
 
-    const expAmt = parseFloat(amount);
+    const valAmount = parseFloat(amount);
+    
+    // Set default placeholder category for transfers
+    let finalCategory = selectedCat;
+    let finalSubcategory = selectedSubcat;
+    if (transactionType === 'Transfer') {
+      finalCategory = 'Transfer';
+      finalSubcategory = 'Transfers';
+    }
+
+    const payload: VirtualExpense = {
+      id: editingId || `exp_${Date.now()}`,
+      date,
+      amount: valAmount,
+      category: finalCategory,
+      subcategory: finalSubcategory,
+      notes: notes.trim() || `${transactionType} record`,
+      paymentMode,
+      transactionType,
+      sourceAccountId: transactionType !== 'Transfer' ? sourceAccountId : undefined,
+      fromSourceAccountId: transactionType === 'Transfer' ? fromSourceAccountId : undefined,
+      toSourceAccountId: transactionType === 'Transfer' ? toSourceAccountId : undefined,
+      personName: needsPersonName ? personName.trim() : undefined,
+      updatedAt: new Date().toISOString(),
+      createdAt: editingId ? undefined : new Date().toISOString(),
+      ...(isRecurring ? {
+        recurring: {
+          frequency: recurringFreq,
+          active: true,
+          lastGenerated: date
+        }
+      } : {})
+    };
 
     if (editingId) {
-      // Update
-      const updatedExpense: VirtualExpense = {
-        id: editingId,
-        date,
-        amount: expAmt,
-        category: selectedCat,
-        subcategory: selectedSubcat,
-        notes,
-        paymentMode
-      };
-      onUpdateExpense(updatedExpense);
-      executeBudgetVerification(selectedCat, 0); // check on update
+      onUpdateExpense(payload);
+      executeBudgetVerification(finalCategory, 0);
       setEditingId(null);
-
-      setShowSuccessToast('✓ Transaction parameters updated successfully!');
-      setTimeout(() => setShowSuccessToast(null), 3000);
+      setShowSuccessToast('✓ Transaction successfully modernized!');
       onTriggerNotification(
         'Transaction Updated',
-        `Successfully updated record for ${selectedCat} : ${selectedSubcat} of ₹${expAmt.toLocaleString()}`
+        `Successfully saved edits for ₹${valAmount.toLocaleString()} (${transactionType})`
       );
     } else {
-      // Create new
-      const newExpense: VirtualExpense = {
-        id: `exp_${Date.now()}`,
-        date,
-        amount: expAmt,
-        category: selectedCat,
-        subcategory: selectedSubcat,
-        notes,
-        paymentMode
-      };
-      onAddExpense(newExpense);
-      executeBudgetVerification(selectedCat, expAmt);
-
-      setShowSuccessToast('✓ Transaction successfully recorded to local memory database!');
-      setTimeout(() => setShowSuccessToast(null), 3500);
+      onAddExpense(payload);
+      executeBudgetVerification(finalCategory, valAmount);
+      setShowSuccessToast('✓ Transaction securely stored to database memory!');
       onTriggerNotification(
         'Transaction Saved',
-        `Recorded ₹${expAmt.toLocaleString()} under ${selectedCat} : ${selectedSubcat}`
+        `Recorded ₹${valAmount.toLocaleString()} classified as ${transactionType}`
       );
     }
 
     resetForm();
+    setTimeout(() => setShowSuccessToast(null), 3000);
   };
 
-  // Edit Trigger
+  // Delete transaction action handler
+  const handleDeleteItem = (id: string) => {
+    setConfirmDeleteId(id);
+  };
+
+  // Edit action initializer
   const handleStartEdit = (exp: VirtualExpense) => {
     setEditingId(exp.id);
     setDate(exp.date);
     setAmount(exp.amount.toString());
-    setSelectedCat(exp.category);
-    // Timeout to let category dependent subcategories populate safely first
-    setTimeout(() => {
-      setSelectedSubcat(exp.subcategory);
-    }, 50);
+    setTransactionType(exp.transactionType || 'Expense');
     setNotes(exp.notes);
-    setPaymentMode(exp.paymentMode);
+    setPaymentMode(exp.paymentMode || 'Cash');
+    setSourceAccountId(exp.sourceAccountId || 'source_cash');
+    setFromSourceAccountId(exp.fromSourceAccountId || 'source_bank');
+    setToSourceAccountId(exp.toSourceAccountId || 'source_cash');
+    setPersonName(exp.personName || '');
+    if (exp.recurring) {
+      setIsRecurring(true);
+      setRecurringFreq(exp.recurring.frequency);
+    } else {
+      setIsRecurring(false);
+    }
+
+    // Safe delay for category options rendering
+    setTimeout(() => {
+      setSelectedCat(exp.category);
+      setSelectedSubcat(exp.subcategory);
+    }, 80);
   };
 
-  // Unlimited dynamic addition of customer categories and subcategories
-  const handleCreateCategory = () => {
-    if (!newCatName.trim()) {
-      alert('Category must have a valid identifier name.');
-      return;
-    }
-    
-    // Check duplication
-    const duplicate = categories.find(c => c.name.toLowerCase() === newCatName.trim().toLowerCase());
-    if (duplicate) {
-      alert('That category already exists.');
-      return;
-    }
+  // Add custom Subcategory dynamically
+  const handleAddCustomSubcategory = () => {
+    const trimmed = newSubcatInputVal.trim();
+    if (!trimmed || !selectedCat) return;
 
-    const subs = newSubcatName.trim() 
-      ? newSubcatName.split(',').map(s => s.trim()).filter(s => s.length > 0)
-      : ['General'];
-
-    const newCategoryObj: VirtualCategory = {
-      id: `cat_${Date.now()}`,
-      name: newCatName.trim(),
-      subcategories: subs
-    };
-
-    onAddCategory(newCategoryObj);
-
-    // Save Budget option if input
-    const parsedBudget = parseFloat(newCatBudget);
-    if (!isNaN(parsedBudget) && parsedBudget > 0) {
-      const newBudget: VirtualBudget = {
-        categoryName: newCategoryObj.name,
-        limitAmount: parsedBudget
-      };
-      onUpdateBudgets([...budgets, newBudget]);
-    }
-
-    // Save custom threshold slider option
-    const currentThresholds = settings.categoryThresholds || {};
-    const updatedThresholds = {
-      ...currentThresholds,
-      [newCategoryObj.name]: newCatThreshold
-    };
-    onUpdateSettings({
-      ...settings,
-      categoryThresholds: updatedThresholds
-    });
-
-    onTriggerNotification(
-      'Category Created',
-      `Registered category "${newCategoryObj.name}" with a budget of ₹${parsedBudget.toLocaleString()} and alert trigger at ${newCatThreshold}%.`
-    );
-
-    setSelectedCat(newCategoryObj.name);
-    setNewCatName('');
-    setNewSubcatName('');
-    setNewCatBudget('5000');
-    setNewCatThreshold(80);
-    setShowCatCreator(false);
-  };
-
-  // Subcategory management on existing selected category
-  const handleAddNewSubcategory = () => {
-    if (!selectedCat) {
-      alert('Please select a category first.');
-      return;
-    }
-    const subName = prompt('Enter new subcategory name:');
-    if (!subName || !subName.trim()) return;
-
-    const trimmedSub = subName.trim();
-    const updatedCategories = categories.map(c => {
+    const updated = categories.map(c => {
       if (c.name.toLowerCase() === selectedCat.toLowerCase()) {
-        if (c.subcategories.some(s => s.toLowerCase() === trimmedSub.toLowerCase())) {
-          alert('Subcategory already existed inside this cluster.');
-          return c;
+        if (!c.subcategories.includes(trimmed)) {
+          return {
+            ...c,
+            subcategories: [...c.subcategories, trimmed]
+          };
         }
-        return {
-          ...c,
-          subcategories: [...c.subcategories, trimmedSub]
-        };
       }
       return c;
     });
 
-    onUpdateCategories(updatedCategories);
-    setSelectedSubcat(trimmedSub);
-
-    onTriggerNotification(
-      'Subcategory Added',
-      `Successfully added "${trimmedSub}" to category "${selectedCat}"`
-    );
+    onUpdateCategories(updated);
+    setSelectedSubcat(trimmed);
+    setIsAddingSub(false);
+    setNewSubcatInputVal('');
   };
 
-  // Filtering Logic
-  const filteredExpenses = useMemo(() => {
-    return expenses.filter(exp => {
-      // 1. Unified text match (Date, Category, Subcategory, Notes, Amount)
-      const q = searchQuery.toLowerCase().trim();
-      const matchText = q === '' || 
-        exp.category.toLowerCase().includes(q) ||
-        exp.subcategory.toLowerCase().includes(q) ||
-        exp.notes.toLowerCase().includes(q) ||
-        exp.amount.toString().includes(q) ||
-        exp.date.includes(q);
+  // Add custom Category drawer submit
+  const handleCreateCategorySubmit = () => {
+    const trimmedName = newCatName.trim();
+    if (!trimmedName) {
+      alert('Fill out category name');
+      return;
+    }
 
-      if (!matchText) return false;
+    const subcats = newSubcatName.split(',').map(s => s.trim()).filter(Boolean);
+    if (subcats.length === 0) subcats.push('General');
 
-      // 2. Filter rules
-      if (filterCategory !== 'All' && exp.category.toLowerCase() !== filterCategory.toLowerCase()) {
-        return false;
+    const newCatObj: VirtualCategory = {
+      id: `cat_user_${Date.now()}`,
+      name: trimmedName,
+      subcategories: subcats,
+      type: newCatType
+    };
+
+    onAddCategory(newCatObj);
+
+    if (newCatType === 'expense' && newCatBudget) {
+      const bAmt = parseFloat(newCatBudget);
+      if (bAmt > 0) {
+        const newBudget: VirtualBudget = { categoryName: trimmedName, limitAmount: bAmt };
+        const updatedBudgets = [...budgets, newBudget];
+        onUpdateBudgets(updatedBudgets);
+
+        // Append custom category safety threshold percentage configuration
+        if (newCatThreshold !== 80) {
+          const currentSettings = { ...settings };
+          currentSettings.categoryThresholds = currentSettings.categoryThresholds || {};
+          currentSettings.categoryThresholds[trimmedName] = newCatThreshold;
+          onUpdateSettings(currentSettings);
+          DbSim.saveSettings(currentSettings);
+        }
+      }
+    }
+
+    setSelectedCat(trimmedName);
+    setSelectedSubcat(subcats[0]);
+    setShowCatCreator(false);
+    setNewCatName('');
+    setNewSubcatName('');
+    setNewCatBudget('5000');
+    setNewCatThreshold(80);
+  };
+
+  // Advanced Filters and search compilation
+  const filteredLedger = useMemo(() => {
+    return expenses.filter(e => {
+      // 1. Text Search matching Category, Subcategory, Notes, PersonName, Amount, Type
+      if (searchQuery.trim() !== '') {
+        const query = searchQuery.toLowerCase();
+        const amtStr = String(e.amount);
+        const matchCat = e.category.toLowerCase().includes(query);
+        const matchSub = e.subcategory.toLowerCase().includes(query);
+        const matchNotes = e.notes.toLowerCase().includes(query);
+        const matchPerson = e.personName ? e.personName.toLowerCase().includes(query) : false;
+        const matchType = (e.transactionType || 'Expense').toLowerCase().includes(query);
+        const matchAmt = amtStr.includes(query);
+
+        if (!matchCat && !matchSub && !matchNotes && !matchPerson && !matchType && !matchAmt) {
+          return false;
+        }
       }
 
-      if (filterPaymentMode !== 'All' && exp.paymentMode.toLowerCase() !== filterPaymentMode.toLowerCase()) {
-        return false;
+      // 2. Transaction Type Filter
+      if (filterType !== 'All') {
+        const activeType = e.transactionType || 'Expense';
+        if (activeType !== filterType) return false;
       }
 
-      const expDate = new Date(exp.date);
-      const expYear = expDate.getFullYear().toString();
-      const expMonthNum = (expDate.getMonth() + 1).toString().padStart(2, '0');
+      // 3. Date Month & Year Filter
+      const entryYear = e.date.substring(0, 4);
+      const entryMonth = e.date.substring(5, 7);
+      if (filterYear !== 'All' && entryYear !== filterYear) return false;
+      if (filterMonth !== 'All' && entryMonth !== filterMonth) return false;
 
-      if (filterYear !== 'All' && expYear !== filterYear) {
-        return false;
+      // 4. Category Filter
+      if (filterCategory !== 'All' && e.category.toLowerCase() !== filterCategory.toLowerCase()) return false;
+
+      // 5. Payment Mode Filter
+      if (filterPaymentMode !== 'All' && e.paymentMode !== filterPaymentMode) return false;
+
+      // 6. Person Filter
+      if (filterPerson.trim() !== '') {
+        const pQuery = filterPerson.toLowerCase();
+        if (!e.personName || !e.personName.toLowerCase().includes(pQuery)) return false;
       }
 
-      if (filterMonth !== 'All' && expMonthNum !== filterMonth) {
-        return false;
+      // 7. Amount Range Filters
+      if (filterMinAmount !== '') {
+        const minVal = parseFloat(filterMinAmount);
+        if (e.amount < minVal) return false;
       }
+      if (filterMaxAmount !== '') {
+        const maxVal = parseFloat(filterMaxAmount);
+        if (e.amount > maxVal) return false;
+      }
+
+      // 8. Custom Date Start and End Filter
+      if (filterStartDate !== '' && e.date < filterStartDate) return false;
+      if (filterEndDate !== '' && e.date > filterEndDate) return false;
 
       return true;
     });
-  }, [expenses, searchQuery, filterMonth, filterYear, filterCategory, filterPaymentMode]);
-
-  // Year list option calculator
-  const yearOptions = useMemo(() => {
-    const years = expenses.map(e => new Date(e.date).getFullYear().toString());
-    return Array.from(new Set(years)).sort((a,b) => b.localeCompare(a));
-  }, [expenses]);
+  }, [
+    expenses,
+    searchQuery,
+    filterType,
+    filterMonth,
+    filterYear,
+    filterCategory,
+    filterPaymentMode,
+    filterPerson,
+    filterMinAmount,
+    filterMaxAmount,
+    filterStartDate,
+    filterEndDate
+  ]);
 
   return (
-    <div className="flex-1 overflow-y-auto bg-slate-50 dark:bg-slate-900 px-4 py-4 space-y-4 scrollbar-thin">
+    <div className="flex-1 flex flex-col overflow-hidden bg-slate-50 dark:bg-slate-900 font-sans relative">
+      <div className="flex-1 overflow-y-auto px-4 py-4 space-y-4 scrollbar-none">
       
-      {/* Toast Alert Success Banner */}
+      {/* Toast Alert Popup */}
       <AnimatePresence>
         {showSuccessToast && (
           <motion.div
-            initial={{ opacity: 0, y: -10, scale: 0.95 }}
-            animate={{ opacity: 1, y: 0, scale: 1 }}
-            exit={{ opacity: 0, y: -10, scale: 0.95 }}
-            className="p-3 bg-emerald-500 text-white rounded-xl shadow-lg border border-emerald-400 font-bold text-xs flex items-center gap-2"
+            initial={{ opacity: 0, y: 15 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -10 }}
+            className="absolute top-16 left-1/2 -translate-x-1/2 bg-emerald-600 text-white font-extrabold text-[10px] uppercase font-mono px-4 py-2 rounded-full z-100 shadow-xl border border-emerald-500 flex items-center gap-1.5"
           >
-            <CheckCircle className="h-4.5 w-4.5 shrink-0 animate-bounce text-white" />
-            <span>{showSuccessToast}</span>
+            <CheckCircle className="h-3 w-3" /> {showSuccessToast}
           </motion.div>
         )}
       </AnimatePresence>
 
-      {/* SECTION 1: Transaction editing form */}
-      <div className="bg-white dark:bg-slate-800 p-4 rounded-xl border border-slate-100 dark:border-slate-800 shadow-sm space-y-3.5 relative">
-        <div className="flex items-center justify-between">
-          <h3 className="text-xs font-black uppercase text-slate-400 dark:text-slate-400 tracking-wider font-mono flex items-center gap-1">
-            <Notebook className="h-4 w-4 text-emerald-500" />
-            {editingId ? 'Edit Locked Transaction' : 'Record New Expense'}
-          </h3>
-          <div className="flex items-center gap-2">
-            {editingId && (
-              <button 
-                onClick={resetForm}
-                className="text-[10px] text-indigo-500 hover:underline flex items-center gap-0.5"
-              >
-                <RotateCcw className="h-3 w-3" /> Cancel Edit
-              </button>
-            )}
-            {onLockApp && (
+      {/* MODAL / BOTTOM SHEET: Custom Category Creator */}
+      <AnimatePresence>
+        {showCatCreator && (
+          <div className="absolute inset-0 bg-slate-900/60 dark:bg-black/80 flex items-center justify-center p-4 z-50">
+            <motion.div
+              initial={{ scale: 0.95, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              exit={{ scale: 0.95, opacity: 0 }}
+              className="bg-white dark:bg-slate-850 p-5 rounded-2xl border border-slate-200 dark:border-slate-800 w-full max-w-xs space-y-3.5 text-xs shadow-2xl font-sans"
+            >
+              <h3 className="font-extrabold text-slate-800 dark:text-slate-100 uppercase tracking-wider font-mono flex justify-between items-center">
+                <span>Configure Category</span>
+                <button onClick={() => setShowCatCreator(false)} className="text-slate-400 hover:text-red-500 cursor-pointer"><X className="h-4 w-4" /></button>
+              </h3>
+
+              <div className="space-y-1">
+                <span className="text-[10px] text-slate-400 dark:text-slate-500 block font-bold uppercase font-mono">Category Allocation Type</span>
+                <div className="grid grid-cols-2 gap-2">
+                  <button
+                    onClick={() => setNewCatType('expense')}
+                    className={`py-1.5 rounded-xl border text-[10px] font-black uppercase font-mono transition-all cursor-pointer ${
+                      newCatType === 'expense' 
+                      ? 'bg-rose-500 text-white border-rose-500' 
+                      : 'bg-slate-50 dark:bg-slate-900 text-slate-400 border-slate-200 dark:border-slate-800'
+                    }`}
+                  >
+                    Expense Cat
+                  </button>
+                  <button
+                    onClick={() => setNewCatType('income')}
+                    className={`py-1.5 rounded-xl border text-[10px] font-black uppercase font-mono transition-all cursor-pointer ${
+                      newCatType === 'income' 
+                      ? 'bg-emerald-600 text-white border-emerald-650' 
+                      : 'bg-slate-50 dark:bg-slate-900 text-slate-400 border-slate-200 dark:border-slate-800'
+                    }`}
+                  >
+                    Income Cat
+                  </button>
+                </div>
+              </div>
+
+              <div className="space-y-1">
+                <span className="text-[10px] text-slate-400 dark:text-slate-500 block font-bold uppercase font-mono">Category Name</span>
+                <input 
+                  type="text" 
+                  value={newCatName}
+                  onChange={(e) => setNewCatName(e.target.value)}
+                  placeholder="e.g. Subscriptions"
+                  className="w-full bg-slate-50 dark:bg-slate-900 p-2 rounded-xl border border-slate-200 dark:border-slate-800 outline-none font-bold"
+                />
+              </div>
+
+              <div className="space-y-1">
+                <span className="text-[10px] text-slate-400 dark:text-slate-500 block font-bold uppercase font-mono">Initial Subcategories (Comma list)</span>
+                <input 
+                  type="text" 
+                  value={newSubcatName}
+                  onChange={(e) => setNewSubcatName(e.target.value)}
+                  placeholder="e.g. Netflix, Spotify, AWS"
+                  className="w-full bg-slate-50 dark:bg-slate-900 p-2 rounded-xl border border-slate-200 dark:border-slate-800 outline-none text-[11px]"
+                />
+              </div>
+
+              {newCatType === 'expense' && (
+                <div className="grid grid-cols-2 gap-2">
+                  <div className="space-y-1">
+                    <span className="text-[10px] text-slate-400 dark:text-slate-500 block font-bold uppercase font-mono">Monthly Cap</span>
+                    <input 
+                      type="number" 
+                      value={newCatBudget}
+                      onChange={(e) => setNewCatBudget(e.target.value)}
+                      placeholder="e.g. 5000"
+                      className="w-full bg-slate-50 dark:bg-slate-900 p-2 rounded-xl border border-slate-105 dark:border-slate-800 outline-none font-mono font-bold text-[#4f46e5]"
+                    />
+                  </div>
+                  <div className="space-y-1">
+                    <span className="text-[10px] text-slate-400 dark:text-slate-500 block font-bold uppercase font-mono">Warning Threshold %</span>
+                    <select
+                      value={newCatThreshold}
+                      onChange={(e) => setNewCatThreshold(parseInt(e.target.value))}
+                      className="w-full bg-slate-50 dark:bg-slate-900 p-2 rounded-xl border border-slate-105 dark:border-slate-800 outline-none text-xs font-bold font-mono text-slate-700 dark:text-slate-200"
+                    >
+                      <option value={50}>50%</option>
+                      <option value={70}>70%</option>
+                      <option value={80}>80%</option>
+                      <option value={90}>90%</option>
+                    </select>
+                  </div>
+                </div>
+              )}
+
               <button
-                type="button"
-                onClick={onLockApp}
-                className="p-1 px-2.5 bg-slate-100 hover:bg-slate-200 dark:bg-slate-700 dark:hover:bg-slate-600 text-[10px] font-black uppercase text-slate-600 hover:text-red-500 dark:text-slate-300 dark:hover:text-red-400 flex items-center gap-1 rounded-lg border border-slate-200 dark:border-slate-650 shadow-xs cursor-pointer transition-all font-mono"
-                title="Lock App"
+                onClick={handleCreateCategorySubmit}
+                className="w-full py-2 bg-[#4f46e5] hover:bg-indigo-700 text-white font-black text-[10px] uppercase tracking-widest font-mono rounded-xl cursor-pointer transition-colors"
               >
-                <LogOut className="h-2.5 w-2.5 text-red-500" /> Lock
+                Provision Category
               </button>
-            )}
+            </motion.div>
           </div>
+        )}
+      </AnimatePresence>
+
+      {/* CORE FORM CARD PANEL */}
+      <div className="bg-white dark:bg-slate-800 p-4 rounded-xl border border-slate-105 dark:border-slate-805 shadow-xs space-y-3">
+        <h3 className="text-[10px] font-black uppercase text-indigo-500 font-mono tracking-widest flex justify-between items-center">
+          <span>{editingId ? '📝 MODIFY RECORD TRANSACTION' : '⚡ RECORD NEW CASHFLOW'}</span>
+          {editingId && (
+            <button
+              onClick={resetForm}
+              className="text-[9px] bg-red-100 hover:bg-red-200 text-red-650 dark:bg-red-955 dark:text-red-300 font-black px-2 py-0.5 rounded font-mono uppercase"
+            >
+              Abort Edit
+            </button>
+          )}
+        </h3>
+
+        {/* Universal Segment Switcher */}
+        <div className="grid grid-cols-5 gap-1 bg-slate-100 dark:bg-slate-900 p-1 rounded-xl">
+          {(['Expense', 'Income', 'LoanGiven', 'LoanTaken', 'Transfer'] as const).map(type => (
+            <button
+              key={type}
+              onClick={() => {
+                setTransactionType(type);
+                // Also reset fields logical to avoid crosstalk
+                setPersonName('');
+              }}
+              className={`p-1.5 rounded-lg text-[9px] font-black uppercase font-mono tracking-tighter text-center transition-all cursor-pointer ${
+                transactionType === type
+                ? 'bg-indigo-600 text-white shadow-xs' 
+                : 'text-slate-400 hover:text-slate-650 dark:hover:text-slate-200'
+              }`}
+            >
+              {type === 'LoanGiven' ? 'Lend' : type === 'LoanTaken' ? 'Borrow' : type}
+            </button>
+          ))}
         </div>
 
-        <div className="space-y-3">
-          {/* Row 1: Date & Amount Fields */}
-          <div className="grid grid-cols-2 gap-3">
-            <div>
-              <label className="text-[11px] font-bold text-slate-500 dark:text-slate-400">Date</label>
-              <div className="flex bg-slate-100 dark:bg-slate-700/60 rounded-lg p-2.5 items-center gap-2 mt-1">
-                <Calendar className="h-4 w-4 text-slate-400" />
-                <input
-                  type="date"
-                  value={date}
-                  onChange={(e) => setDate(e.target.value)}
-                  className="bg-transparent border-0 outline-none text-xs text-slate-800 dark:text-slate-100 w-full"
-                />
-              </div>
-            </div>
-            <div>
-              <label className="text-[11px] font-bold text-slate-500 dark:text-slate-400">Amount (INR)</label>
-              <div className="flex bg-slate-100 dark:bg-slate-700/60 rounded-lg p-2.5 items-center gap-1.5 mt-1">
-                <span className="text-slate-400 font-bold text-xs font-mono">₹</span>
-                <input
-                  type="number"
-                  placeholder="0.00"
-                  value={amount}
-                  onChange={(e) => setAmount(e.target.value)}
-                  className="bg-transparent border-0 outline-none text-xs text-slate-800 dark:text-slate-100 font-mono w-full"
-                  required
-                />
-              </div>
+        {/* Input Parameters */}
+        <div className="grid grid-cols-2 gap-3 text-xs font-sans">
+          
+          {/* Main Amount */}
+          <div className="space-y-1">
+            <label className="text-[10px] text-slate-400 font-bold uppercase tracking-wider block">Financial Value</label>
+            <div className="relative">
+              <span className="absolute left-3 top-2.5 font-bold font-mono text-slate-450">{currencySymbol}</span>
+              <input 
+                type="number" 
+                value={amount}
+                onChange={(e) => setAmount(e.target.value)}
+                placeholder="0.00"
+                className="w-full bg-slate-50 dark:bg-slate-900 pl-7 pr-3 py-2 border border-slate-205 dark:border-slate-700 rounded-xl outline-none text-slate-800 dark:text-slate-100 font-black font-mono focus:ring-2 focus:ring-indigo-500 transition-all text-xs"
+              />
             </div>
           </div>
 
-          {/* Row 2: Category & dependent subcategories */}
-          <div className="grid grid-cols-2 gap-3">
-            <div>
-              <div className="flex justify-between items-center">
-                <label className="text-[11px] font-bold text-slate-500 dark:text-slate-400">Category</label>
-                <button
-                  type="button"
-                  onClick={() => setShowCatCreator(true)}
-                  className="text-[10px] text-indigo-500 font-bold hover:underline flex items-center gap-0.5"
-                  title="Add new category"
-                >
-                  <Plus className="h-2.5 w-2.5" /> New
-                </button>
-              </div>
-              <div className="bg-slate-100 dark:bg-slate-700/60 rounded-lg p-1 mt-1 flex items-center">
-                <select
-                  value={selectedCat}
-                  onChange={(e) => {
-                    setSelectedCat(e.target.value);
-                    setSelectedSubcat(''); // clear subcategory selection when category changes
-                    setIsAddingSub(false);
-                    setNewSubcatInputVal('');
-                  }}
-                  className="bg-transparent border-0 outline-none p-1.5 text-xs text-slate-800 dark:text-slate-100 w-full"
-                >
-                  <option value="" className="text-slate-400">-- Select Category --</option>
-                  {categories.map(c => (
-                    <option key={c.id} value={c.name} className="dark:bg-slate-800 text-slate-800 dark:text-slate-100">
-                      {c.name}
-                    </option>
-                  ))}
-                </select>
+          {/* Date Picker */}
+          <div className="space-y-1">
+            <label className="text-[10px] text-slate-400 font-bold uppercase tracking-wider block">Date</label>
+            <input 
+              type="date"
+              value={date}
+              onChange={(e) => setDate(e.target.value)}
+              className="w-full bg-slate-50 dark:bg-slate-900 py-2 px-3 border border-slate-205 dark:border-slate-700 rounded-xl outline-none font-bold text-slate-800 dark:text-slate-100 text-xs text-center"
+            />
+          </div>
+
+          {/* Conditional Input: Person Name / Destination */}
+          {(transactionType === 'LoanGiven' || transactionType === 'LoanTaken' || transactionType === 'Transfer') && (
+            <div className="col-span-2 space-y-1">
+              <label className="text-[10px] text-slate-400 font-bold uppercase tracking-wider block">
+                {transactionType === 'Transfer' ? 'Transfer Path / Account Name' : 'Associated Person Name (Mandatory)'}
+              </label>
+              <div className="relative">
+                <span className="absolute left-3 top-2.5"><User className="h-3.5 w-3.5 text-slate-400" /></span>
+                <input 
+                  type="text"
+                  placeholder={transactionType === 'Transfer' ? 'e.g. ICICI Bank to HDFC Credit Card' : 'e.g. Sumit Verma'}
+                  value={personName}
+                  onChange={(e) => setPersonName(e.target.value)}
+                  className="w-full bg-slate-50 dark:bg-slate-900 pl-8 pr-3 py-2 border border-slate-205 dark:border-slate-700 rounded-xl outline-none font-semibold text-slate-850 dark:text-slate-100 placeholder:text-slate-400"
+                />
               </div>
             </div>
+          )}
 
-            <div>
-              <div className="flex justify-between items-center">
-                <label className="text-[11px] font-bold text-slate-500 dark:text-slate-400">Subcategory</label>
-                {selectedCat && selectedCat !== '' && (
-                  <button
-                    type="button"
+          {/* Category Picker (unless Transfer) */}
+          {transactionType !== 'Transfer' && (
+            <>
+              <div className="space-y-1">
+                <div className="flex justify-between items-center">
+                  <label className="text-[10px] text-slate-400 font-bold uppercase tracking-wider block font-sans">Category</label>
+                  <button 
                     onClick={() => {
-                      setIsAddingSub(!isAddingSub);
-                      setNewSubcatInputVal('');
+                      setNewCatType(transactionType === 'Income' || transactionType === 'LoanTaken' ? 'income' : 'expense');
+                      setShowCatCreator(true);
                     }}
-                    className="text-[10px] text-emerald-500 font-bold hover:underline flex items-center gap-0.5"
-                    title="Add subcategory to selected category cluster"
+                    className="text-[9px] text-indigo-500 hover:underline flex items-center font-bold"
                   >
-                    {isAddingSub ? 'Cancel' : <><Plus className="h-2.5 w-2.5" /> Sub</>}
+                    + Setup
                   </button>
-                )}
+                </div>
+                <select
+                  value={selectedCat}
+                  onChange={(e) => handleCategorySelect(e.target.value)}
+                  className="w-full bg-slate-50 dark:bg-slate-900 p-2.5 border border-slate-205 dark:border-slate-700 rounded-xl outline-none font-bold text-xs"
+                >
+                  {activeCategoriesOptions.map(c => (
+                    <option key={c.id} value={c.name}>{c.name}</option>
+                  ))}
+                  {activeCategoriesOptions.length === 0 && (
+                    <option value="">No categories</option>
+                  )}
+                </select>
               </div>
-              <div className="bg-slate-100 dark:bg-slate-700/60 rounded-lg p-1 mt-1 flex items-center min-h-[38px]">
+
+              {/* Dependent Subcategory Selector */}
+              <div className="space-y-1">
+                <div className="flex justify-between items-center">
+                  <label className="text-[10px] text-slate-400 font-bold uppercase tracking-wider block">Sub-Category</label>
+                  {selectedCat && !isAddingSub && (
+                    <button
+                      onClick={() => setIsAddingSub(true)}
+                      className="text-[9px] text-indigo-500 hover:underline font-bold"
+                    >
+                      + Add
+                    </button>
+                  )}
+                </div>
                 {isAddingSub ? (
-                  <div className="flex items-center w-full gap-1.5 px-1.5">
+                  <div className="flex gap-1">
                     <input
                       type="text"
-                      placeholder="Type subcategory..."
+                      placeholder="Label"
                       value={newSubcatInputVal}
                       onChange={(e) => setNewSubcatInputVal(e.target.value)}
-                      className="bg-transparent border-0 outline-none text-xs text-slate-800 dark:text-slate-100 w-full px-1"
-                      autoFocus
-                      onKeyDown={(e) => {
-                        if (e.key === 'Enter') {
-                          e.preventDefault();
-                          const trimmedSub = newSubcatInputVal.trim();
-                          if (!trimmedSub) return;
-                          const updatedCategories = categories.map(c => {
-                            if (c.name.toLowerCase() === selectedCat.toLowerCase()) {
-                              if (c.subcategories.some(s => s.toLowerCase() === trimmedSub.toLowerCase())) {
-                                alert('Subcategory already existed inside this cluster.');
-                                return c;
-                              }
-                              return {
-                                ...c,
-                                subcategories: [...c.subcategories, trimmedSub]
-                              };
-                            }
-                            return c;
-                          });
-                          onUpdateCategories(updatedCategories);
-                          setSelectedSubcat(trimmedSub);
-                          onTriggerNotification(
-                            'Subcategory Added',
-                            `Successfully added "${trimmedSub}" to category "${selectedCat}"`
-                          );
-                          setIsAddingSub(false);
-                        }
-                      }}
+                      className="w-full bg-slate-50 dark:bg-slate-900 p-2 border border-slate-205 dark:border-slate-700 rounded-lg text-[10px] font-bold"
                     />
                     <button
-                      type="button"
-                      onClick={() => {
-                        const trimmedSub = newSubcatInputVal.trim();
-                        if (!trimmedSub) {
-                          alert('Please enter a subcategory name.');
-                          return;
-                        }
-                        const updatedCategories = categories.map(c => {
-                          if (c.name.toLowerCase() === selectedCat.toLowerCase()) {
-                            if (c.subcategories.some(s => s.toLowerCase() === trimmedSub.toLowerCase())) {
-                              alert('Subcategory already existed inside this cluster.');
-                              return c;
-                            }
-                            return {
-                              ...c,
-                              subcategories: [...c.subcategories, trimmedSub]
-                            };
-                          }
-                          return c;
-                        });
-                        onUpdateCategories(updatedCategories);
-                        setSelectedSubcat(trimmedSub);
-                        onTriggerNotification(
-                          'Subcategory Added',
-                          `Successfully added "${trimmedSub}" to category "${selectedCat}"`
-                        );
-                        setIsAddingSub(false);
-                      }}
-                      className="shrink-0 px-2.5 py-1 bg-emerald-600 hover:bg-emerald-700 text-white rounded text-[10px] font-bold shadow-xs transition-all cursor-pointer"
+                      onClick={handleAddCustomSubcategory}
+                      className="px-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-[10px]"
                     >
-                      Save
+                      ✓
+                    </button>
+                    <button
+                      onClick={() => setIsAddingSub(false)}
+                      className="px-1.5 bg-slate-300 dark:bg-slate-700 text-slate-600 rounded-lg text-[10px]"
+                    >
+                      X
                     </button>
                   </div>
                 ) : (
                   <select
                     value={selectedSubcat}
                     onChange={(e) => setSelectedSubcat(e.target.value)}
-                    className="bg-transparent border-0 outline-none p-1.5 text-xs text-slate-800 dark:text-slate-100 w-full font-sans"
-                    disabled={!selectedCat || selectedCat === '' || subcategoryOptions.length === 0}
+                    className="w-full bg-slate-50 dark:bg-slate-900 p-2.5 border border-slate-205 dark:border-slate-700 rounded-xl outline-none font-bold text-xs"
                   >
-                    <option value="" className="text-slate-400">
-                      {!selectedCat || selectedCat === '' ? 'Choose Category First' : '-- Choose Subcategory --'}
-                    </option>
-                    {subcategoryOptions.map(sub => (
-                      <option key={sub} value={sub} className="dark:bg-slate-800 text-slate-800 dark:text-slate-100">
-                        {sub}
-                      </option>
+                    {subcategoryOptions.map(s => (
+                      <option key={s} value={s}>{s}</option>
                     ))}
-                    {selectedCat && selectedCat !== '' && subcategoryOptions.length === 0 && (
+                    {subcategoryOptions.length === 0 && (
                       <option value="">General</option>
                     )}
                   </select>
                 )}
               </div>
-            </div>
-          </div>
+            </>
+          )}
 
-          {/* Row 3: Notes & Payment Modes */}
-          <div className="grid grid-cols-2 gap-3">
-            <div>
-              <label className="text-[11px] font-bold text-slate-500 dark:text-slate-400">Notes & Details</label>
-              <div className="bg-slate-100 dark:bg-slate-700/60 rounded-lg p-2 mt-1">
-                <input
-                  type="text"
-                  placeholder="e.g. Starbucks lunch"
-                  value={notes}
-                  onChange={(e) => setNotes(e.target.value)}
-                  className="bg-transparent border-0 outline-none text-xs text-slate-800 dark:text-slate-100 w-full"
-                />
+          {/* Money Source selection / Transfer Accounts configuration */}
+          {transactionType !== 'Transfer' ? (
+            <>
+              <div className="space-y-1 col-span-1">
+                <label className="text-[10px] text-slate-400 font-bold uppercase tracking-wider block">Select Money Source</label>
+                <select
+                  value={sourceAccountId}
+                  onChange={(e) => setSourceAccountId(e.target.value)}
+                  className="w-full bg-slate-50 dark:bg-slate-900 p-2.5 border border-slate-205 dark:border-slate-700 rounded-xl outline-none font-bold text-xs"
+                >
+                  {moneySources.filter(s => !s.archived).map(s => (
+                    <option key={s.id} value={s.id}>{s.name}</option>
+                  ))}
+                </select>
               </div>
-            </div>
 
-            <div>
-              <label className="text-[11px] font-bold text-slate-500 dark:text-slate-400">Payment Mode</label>
-              <div className="bg-slate-100 dark:bg-slate-700/60 rounded-lg p-1 mt-1">
+              <div className="space-y-1 col-span-1">
+                <label className="text-[10px] text-slate-400 font-bold uppercase tracking-wider block">Payment Mode</label>
                 <select
                   value={paymentMode}
                   onChange={(e) => setPaymentMode(e.target.value as any)}
-                  className="bg-transparent border-0 outline-none p-1.5 text-xs text-slate-800 dark:text-slate-100 w-full"
+                  className="w-full bg-slate-50 dark:bg-slate-900 p-2.5 border border-slate-205 dark:border-slate-700 rounded-xl outline-none font-bold text-xs"
                 >
-                  <option value="Cash" className="dark:bg-slate-800 text-slate-800 dark:text-slate-100">Cash</option>
-                  <option value="UPI" className="dark:bg-slate-800 text-slate-800 dark:text-slate-100">UPI</option>
-                  <option value="Credit Card" className="dark:bg-slate-800 text-slate-800 dark:text-slate-100">Credit Card</option>
-                  <option value="Debit Card" className="dark:bg-slate-800 text-slate-800 dark:text-slate-100">Debit Card</option>
-                  <option value="Bank Transfer" className="dark:bg-slate-800 text-slate-800 dark:text-slate-100">Bank Transfer</option>
+                  <option value="Cash">Cash Wallet</option>
+                  <option value="UPI">UPI Digital Payment</option>
+                  <option value="Credit Card">Credit Card Line</option>
+                  <option value="Debit Card">Debit Checking Card</option>
+                  <option value="Bank Transfer">Bank Transfer / IMPS</option>
                 </select>
               </div>
+            </>
+          ) : (
+            <>
+              <div className="space-y-1 col-span-1">
+                <label className="text-[10px] text-slate-400 font-bold uppercase tracking-wider block">From Source Account</label>
+                <select
+                  value={fromSourceAccountId}
+                  onChange={(e) => setFromSourceAccountId(e.target.value)}
+                  className="w-full bg-slate-50 dark:bg-slate-900 p-2.5 border border-slate-205 dark:border-slate-700 rounded-xl outline-none font-bold text-xs"
+                >
+                  {moneySources.filter(s => !s.archived).map(s => (
+                    <option key={s.id} value={s.id}>{s.name}</option>
+                  ))}
+                </select>
+              </div>
+
+              <div className="space-y-1 col-span-1">
+                <label className="text-[10px] text-slate-400 font-bold uppercase tracking-wider block">To Source Account</label>
+                <select
+                  value={toSourceAccountId}
+                  onChange={(e) => setToSourceAccountId(e.target.value)}
+                  className="w-full bg-slate-50 dark:bg-slate-900 p-2.5 border border-slate-205 dark:border-slate-700 rounded-xl outline-none font-bold text-xs"
+                >
+                  {moneySources.filter(s => !s.archived).map(s => (
+                    <option key={s.id} value={s.id}>{s.name}</option>
+                  ))}
+                </select>
+              </div>
+            </>
+          )}
+
+          {/* Notes description */}
+          <div className="space-y-1 col-span-2">
+            <label className="text-[10px] text-slate-400 font-bold uppercase tracking-wider block">Description Memo</label>
+            <input 
+              type="text" 
+              placeholder="e.g. McDonald's big mac lunch"
+              value={notes}
+              onChange={(e) => setNotes(e.target.value)}
+              className="w-full bg-slate-50 dark:bg-slate-900 p-2.5 border border-slate-205 dark:border-slate-700 rounded-xl outline-none font-medium placeholder:text-slate-400"
+            />
+          </div>
+
+          {/* Recurring Option Toggler */}
+          <div className="col-span-2 bg-slate-100/50 dark:bg-slate-900/40 p-2.5 rounded-xl border border-slate-200/40 dark:border-slate-800 flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <Clock className="h-4 w-4 text-indigo-500" />
+              <div>
+                <span className="text-[10px] font-black text-slate-750 dark:text-slate-200 block leading-tight font-mono uppercase">Recurring entries planner</span>
+                <span className="text-[8px] text-slate-400 block leading-none">Auto-generate future transactions</span>
+              </div>
+            </div>
+            
+            <div className="flex items-center gap-2">
+              {isRecurring && (
+                <select
+                  value={recurringFreq}
+                  onChange={(e) => setRecurringFreq(e.target.value as any)}
+                  className="bg-white dark:bg-slate-850 py-1 px-1.5 border border-slate-200 dark:border-slate-700 rounded text-[9px] font-bold font-mono outline-none"
+                >
+                  <option value="Daily">Daily</option>
+                  <option value="Weekly">Weekly</option>
+                  <option value="Monthly">Monthly</option>
+                  <option value="Yearly">Yearly</option>
+                </select>
+              )}
+              <input 
+                type="checkbox"
+                checked={isRecurring}
+                onChange={(e) => setIsRecurring(e.target.checked)}
+                className="w-4 h-4 text-indigo-650 cursor-pointer"
+              />
             </div>
           </div>
 
-          {/* Row 4: Action Submission Buttons */}
-          <div className="grid grid-cols-2 gap-3 pt-2">
-            <button
-              onClick={() => handleSave()}
-              className="py-2.5 bg-indigo-600 hover:bg-indigo-700 active:scale-95 text-white rounded-lg font-bold text-xs shadow-md transition-all flex items-center justify-center gap-1.5 cursor-pointer col-span-1"
-            >
-              <Save className="h-4 w-4" />
-              {editingId ? 'Update Record' : 'Save'}
-            </button>
-            <button
-              onClick={resetForm}
-              className="py-2.5 bg-slate-200 hover:bg-slate-300 dark:bg-slate-700 dark:hover:bg-slate-650 active:scale-95 text-slate-800 dark:text-slate-100 rounded-lg font-bold text-xs transition-all flex items-center justify-center gap-1.5 cursor-pointer col-span-1"
-            >
-              <RotateCcw className="h-4 w-4" />
-              Reset
-            </button>
-          </div>
         </div>
 
-        {/* Dynamic inline Category addition creator pop-up */}
-        <AnimatePresence>
-          {showCatCreator && (
-            <motion.div
-              initial={{ opacity: 0, y: 15 }}
-              animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0, y: 15 }}
-              className="absolute inset-0 bg-white dark:bg-slate-800 p-4 rounded-xl z-25 flex flex-col justify-between border border-indigo-200 dark:border-indigo-805"
-            >
-              <div className="space-y-3 overflow-y-auto pr-0.5 scrollbar-thin">
-                <div className="flex items-center justify-between">
-                  <h4 className="text-xs font-black uppercase text-indigo-600 dark:text-indigo-400 font-mono flex items-center gap-1">
-                    <FolderPlus className="h-4 w-4" /> Create Custom Category Cluster
-                  </h4>
-                  <button 
-                    type="button"
-                    onClick={() => setShowCatCreator(false)}
-                    className="text-[10px] text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 uppercase font-black"
-                  >
-                    Cancel
-                  </button>
-                </div>
-                
-                <div className="space-y-3 text-left">
-                  <div>
-                    <label className="text-[10px] font-bold text-slate-500 uppercase">Category Name</label>
-                    <input
-                      type="text"
-                      placeholder="e.g. Medical, Health"
-                      value={newCatName}
-                      onChange={(e) => setNewCatName(e.target.value)}
-                      className="bg-slate-100 dark:bg-slate-700 p-1.5 text-xs rounded-lg w-full text-slate-800 dark:text-slate-100 outline-none mt-1 border border-transparent focus:border-indigo-500"
-                    />
-                  </div>
-
-                  <div>
-                    <label className="text-[10px] font-bold text-slate-500 uppercase">Subcategories (Comma separated)</label>
-                    <input
-                      type="text"
-                      placeholder="e.g. Medicine, Doctor visit, Tests"
-                      value={newSubcatName}
-                      onChange={(e) => setNewSubcatName(e.target.value)}
-                      className="bg-slate-100 dark:bg-slate-700 p-1.5 text-xs rounded-lg w-full text-slate-800 dark:text-slate-100 outline-none mt-1 border border-transparent focus:border-indigo-500"
-                    />
-                    <span className="text-[8px] text-slate-400 block mt-0.5">Leave blank to inherit a default &quot;General&quot; subcategory</span>
-                  </div>
-
-                  {/* Threshold & Budget Configuration Controls */}
-                  <div className="grid grid-cols-2 gap-2.5 pt-1.5 border-t border-slate-100 dark:border-slate-700">
-                    <div>
-                      <label className="text-[10px] font-bold text-slate-500 uppercase">Monthly Budget</label>
-                      <div className="flex bg-slate-100 dark:bg-slate-700 rounded-lg p-1.5 items-center gap-1 mt-1 border border-transparent focus-within:border-indigo-500All">
-                        <span className="text-slate-400 font-bold text-[10px] font-mono">₹</span>
-                        <input
-                          type="number"
-                          placeholder="5000"
-                          value={newCatBudget}
-                          onChange={(e) => setNewCatBudget(e.target.value)}
-                          className="bg-transparent border-0 outline-none text-xs text-slate-800 dark:text-slate-100 font-mono w-full"
-                        />
-                      </div>
-                    </div>
-
-                    <div>
-                      <div className="flex justify-between items-center">
-                        <label className="text-[10px] font-bold text-slate-500 uppercase">Alert Threshold</label>
-                        <span className="text-[10px] font-mono font-bold text-indigo-500">{newCatThreshold}%</span>
-                      </div>
-                      <div className="mt-2.5">
-                        <input
-                          type="range"
-                          min="10"
-                          max="100"
-                          step="5"
-                          value={newCatThreshold}
-                          onChange={(e) => setNewCatThreshold(parseInt(e.target.value))}
-                          className="w-full h-2 bg-slate-100 dark:bg-slate-705 rounded-lg cursor-pointer accent-indigo-600"
-                        />
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              </div>
-
-              <button
-                type="button"
-                onClick={handleCreateCategory}
-                className="py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg text-xs font-black tracking-wider uppercase mt-2 w-full transition-colors cursor-pointer"
-              >
-                Save Category Cluster
-              </button>
-            </motion.div>
-          )}
-        </AnimatePresence>
+        {/* Buttons */}
+        <div className="flex gap-2.5 pt-1.5 font-mono">
+          <button
+            onClick={resetForm}
+            className="flex-1 py-2 bg-slate-100 hover:bg-slate-200 dark:bg-slate-900 text-slate-600 dark:text-slate-400 border border-slate-300/40 font-bold rounded-xl cursor-pointer transition-all uppercase text-[9px] tracking-wider"
+          >
+            Clear Fields
+          </button>
+          <button
+            onClick={handleSave}
+            className="flex-1 py-2 bg-indigo-650 hover:bg-indigo-700 text-white font-extrabold rounded-xl cursor-pointer transition-all shadow-md active:scale-95 flex items-center justify-center gap-1.5 uppercase text-[9px] tracking-widest border border-indigo-500/25"
+          >
+            <Save className="h-3 w-3" /> Save To DB
+          </button>
+        </div>
       </div>
 
-      {/* SECTION 2: Advanced Search, Multi-Filter, and itemized transaction log list */}
-      <div className="bg-white dark:bg-slate-800 p-4 rounded-xl border border-slate-100 dark:border-slate-800 shadow-sm space-y-3">
-        <div className="flex items-center justify-between">
-          <h3 className="text-xs font-black uppercase text-slate-400 dark:text-slate-400 tracking-wider font-mono">
-            Transaction Ledger ({filteredExpenses.length} Records)
+      {/* FILTER & LEDGER VAULT PANEL */}
+      <div className="bg-white dark:bg-slate-800 p-4 rounded-xl border border-slate-105 dark:border-slate-850 shadow-xs space-y-3 font-sans">
+        
+        {/* Title row */}
+        <div className="flex justify-between items-center border-b border-slate-105 dark:border-slate-750/70 pb-2">
+          <h3 className="text-[10px] font-black uppercase text-slate-400 font-mono tracking-widest flex items-center gap-1">
+            <Notebook className="h-3 w-3 text-emerald-500" /> System Ledger Database
           </h3>
           <button
             onClick={() => setIsFilterOpen(!isFilterOpen)}
-            className={`p-1.5 rounded-lg border flex items-center justify-center transition-all cursor-pointer ${
-              isFilterOpen || filterCategory !== 'All' || filterMonth !== 'All' || filterPaymentMode !== 'All' || filterYear !== 'All'
-                ? 'bg-indigo-50 border-indigo-200 text-indigo-600 dark:bg-indigo-950/40 dark:border-indigo-800 dark:text-indigo-400'
-                : 'border-slate-200 dark:border-slate-700 text-slate-500 dark:text-slate-400'
+            className={`px-2 py-1 font-bold rounded flex items-center gap-1.5 text-[9px] cursor-pointer font-mono border transition-all ${
+              isFilterOpen 
+              ? 'bg-amber-100 text-amber-700 border-amber-300' 
+              : 'bg-slate-50 dark:bg-slate-900 text-slate-500 border-slate-200 dark:border-slate-750'
             }`}
           >
-            <Filter className="h-4 w-4" />
+            <Filter className="h-3 w-3" /> {isFilterOpen ? 'Lock Filters' : 'Toggle Filters'}
           </button>
         </div>
 
-        {/* Global Text search across database */}
-        <div className="flex bg-slate-100 dark:bg-slate-700/60 rounded-lg p-2 items-center gap-2">
-          <Search className="h-4 w-4 text-slate-400" />
-          <input
-            type="text"
-            placeholder="Search dates, category, notes, price, amount..."
+        {/* Instant Search Bar */}
+        <div className="relative">
+          <span className="absolute left-3 top-2.5"><Search className="h-3. w-3 text-slate-400" /></span>
+          <input 
+            type="text" 
+            placeholder="Search categories, subcats, notes, amounts, tag types..."
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
-            className="bg-transparent border-0 outline-none text-xs text-slate-800 dark:text-slate-100 w-full"
+            className="w-full bg-slate-50 dark:bg-slate-900 border border-slate-205 dark:border-slate-700 pl-8 pr-3 py-2 text-xs rounded-xl outline-none placeholder:text-slate-400 font-medium"
           />
         </div>
 
-        {/* Expandable Multi Filter Controls */}
+        {/* Filters Drawer Sheet */}
         <AnimatePresence>
           {isFilterOpen && (
             <motion.div
               initial={{ height: 0, opacity: 0 }}
               animate={{ height: 'auto', opacity: 1 }}
               exit={{ height: 0, opacity: 0 }}
-              className="p-3 bg-slate-50 dark:bg-slate-900/60 rounded-xl space-y-3 border border-slate-100 dark:border-slate-805 overflow-hidden"
+              className="p-3 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl space-y-3 overflow-hidden text-xs font-sans"
             >
-              <div className="grid grid-cols-2 gap-2 text-xs">
-                {/* Month Selector */}
-                <div>
-                  <label className="text-[10px] text-slate-400 font-bold uppercase font-sans">Month</label>
+              <div className="grid grid-cols-2 gap-2 text-[10px]">
+                
+                {/* Transaction Type */}
+                <div className="space-y-0.5">
+                  <span className="text-[9px] text-slate-400 font-bold font-mono">TX Type</span>
                   <select
-                    value={filterMonth}
-                    onChange={(e) => setFilterMonth(e.target.value)}
-                    className="w-full bg-white dark:bg-slate-800 p-1.5 rounded border border-slate-100 dark:border-slate-700 text-xs mt-1"
+                    value={filterType}
+                    onChange={(e) => setFilterType(e.target.value)}
+                    className="w-full bg-white dark:bg-slate-850 p-1.5 border border-slate-201 dark:border-slate-750 rounded text-[10px]"
                   >
-                    <option value="All">All Months</option>
-                    <option value="01">January</option>
-                    <option value="02">February</option>
-                    <option value="03">March</option>
-                    <option value="04">April</option>
-                    <option value="05">May</option>
-                    <option value="06">June</option>
-                    <option value="07">July</option>
-                    <option value="08">August</option>
-                    <option value="09">September</option>
-                    <option value="10">October</option>
-                    <option value="11">November</option>
-                    <option value="12">December</option>
+                    <option value="All">All Types</option>
+                    <option value="Expense">Expense Only</option>
+                    <option value="Income">Income Only</option>
+                    <option value="LoanGiven">Lending Only</option>
+                    <option value="LoanTaken">Borrowing Only</option>
+                    <option value="Transfer">Transfers Only</option>
                   </select>
                 </div>
 
-                {/* Year Selector */}
-                <div>
-                  <label className="text-[10px] text-slate-400 font-bold uppercase font-sans">Year</label>
-                  <select
-                    value={filterYear}
-                    onChange={(e) => setFilterYear(e.target.value)}
-                    className="w-full bg-white dark:bg-slate-800 p-1.5 rounded border border-slate-100 dark:border-slate-700 text-xs mt-1"
-                  >
-                    <option value="All">All Years</option>
-                    {yearOptions.map(yr => (
-                      <option key={yr} value={yr}>{yr}</option>
-                    ))}
-                  </select>
-                </div>
-
-                {/* Category Selector */}
-                <div>
-                  <label className="text-[10px] text-slate-400 font-bold uppercase font-sans">Category</label>
+                {/* Categories */}
+                <div className="space-y-0.5">
+                  <span className="text-[9px] text-slate-400 font-bold font-mono">Cat Filter</span>
                   <select
                     value={filterCategory}
                     onChange={(e) => setFilterCategory(e.target.value)}
-                    className="w-full bg-white dark:bg-slate-800 p-1.5 rounded border border-slate-100 dark:border-slate-700 text-xs mt-1"
+                    className="w-full bg-white dark:bg-slate-850 p-1.5 border border-slate-201 dark:border-slate-750 rounded text-[10px]"
                   >
                     <option value="All">All Categories</option>
-                    {categories.map(c => (
-                      <option key={c.id} value={c.name}>{c.name}</option>
-                    ))}
+                    {categories.map(c => <option key={c.id} value={c.name}>{c.name}</option>)}
                   </select>
                 </div>
 
-                {/* Payment Mode Selector */}
-                <div>
-                  <label className="text-[10px] text-slate-400 font-bold uppercase font-sans">Payment Mode</label>
+                {/* Period Month */}
+                <div className="space-y-0.5">
+                  <span className="text-[9px] text-slate-400 font-bold font-mono">Month</span>
+                  <select
+                    value={filterMonth}
+                    onChange={(e) => setFilterMonth(e.target.value)}
+                    className="w-full bg-white dark:bg-slate-850 p-1.5 border border-slate-201 dark:border-slate-750 rounded text-[10px] font-mono"
+                  >
+                    <option value="All">All Months</option>
+                    <option value="01">Jan</option>
+                    <option value="02">Feb</option>
+                    <option value="03">Mar</option>
+                    <option value="04">Apr</option>
+                    <option value="05">May</option>
+                    <option value="06">June</option>
+                    <option value="07">July</option>
+                    <option value="08">Aug</option>
+                    <option value="09">Sep</option>
+                    <option value="10">Oct</option>
+                    <option value="11">Nov</option>
+                    <option value="12">Dec</option>
+                  </select>
+                </div>
+
+                {/* Period Year */}
+                <div className="space-y-0.5">
+                  <span className="text-[9px] text-slate-400 font-bold font-mono">Year</span>
+                  <select
+                    value={filterYear}
+                    onChange={(e) => setFilterYear(e.target.value)}
+                    className="w-full bg-white dark:bg-slate-850 p-1.5 border border-slate-201 dark:border-slate-750 rounded text-[10px] font-mono"
+                  >
+                    <option value="All">All Time</option>
+                    <option value="2026">2026</option>
+                    <option value="2025">2025</option>
+                  </select>
+                </div>
+
+                {/* payment mode */}
+                <div className="space-y-0.5">
+                  <span className="text-[9px] text-slate-400 font-bold font-mono">Payment Mode</span>
                   <select
                     value={filterPaymentMode}
                     onChange={(e) => setFilterPaymentMode(e.target.value)}
-                    className="w-full bg-white dark:bg-slate-800 p-1.5 rounded border border-slate-100 dark:border-slate-700 text-xs mt-1"
+                    className="w-full bg-white dark:bg-slate-850 p-1.5 border border-slate-201 dark:border-slate-750 rounded text-[10px]"
                   >
-                    <option value="All">All payment modes</option>
-                    <option value="Cash">Cash</option>
+                    <option value="All">All Modes</option>
+                    <option value="Cash">Cash Wallet</option>
                     <option value="UPI">UPI</option>
                     <option value="Credit Card">Credit Card</option>
                     <option value="Debit Card">Debit Card</option>
                     <option value="Bank Transfer">Bank Transfer</option>
                   </select>
                 </div>
+
+                {/* Person Partner filtering */}
+                <div className="space-y-0.5">
+                  <span className="text-[9px] text-slate-400 font-bold font-mono">Contact / Partner</span>
+                  <input
+                    type="text"
+                    placeholder="Partner name"
+                    value={filterPerson}
+                    onChange={(e) => setFilterPerson(e.target.value)}
+                    className="w-full bg-white dark:bg-slate-850 p-1.5 border border-slate-201 dark:border-slate-750 rounded text-[10px]"
+                  />
+                </div>
+
+                {/* Amount ranges */}
+                <div className="space-y-0.5">
+                  <span className="text-[9px] text-slate-400 font-bold font-mono">Min Value</span>
+                  <input
+                    type="number"
+                    placeholder="Min amount"
+                    value={filterMinAmount}
+                    onChange={(e) => setFilterMinAmount(e.target.value)}
+                    className="w-full bg-white dark:bg-slate-850 p-1.5 border border-slate-201 dark:border-slate-750 rounded text-[10px]"
+                  />
+                </div>
+                <div className="space-y-0.5">
+                  <span className="text-[9px] text-slate-400 font-bold font-mono">Max Value</span>
+                  <input
+                    type="number"
+                    placeholder="Max amount"
+                    value={filterMaxAmount}
+                    onChange={(e) => setFilterMaxAmount(e.target.value)}
+                    className="w-full bg-white dark:bg-slate-850 p-1.5 border border-slate-201 dark:border-slate-755 rounded text-[10px]"
+                  />
+                </div>
+
+                {/* Start & End Dates */}
+                <div className="space-y-0.5">
+                  <span className="text-[9px] text-slate-400 font-bold font-mono">Start Date</span>
+                  <input
+                    type="date"
+                    value={filterStartDate}
+                    onChange={(e) => setFilterStartDate(e.target.value)}
+                    className="w-full bg-white dark:bg-slate-850 p-1 border border-slate-201 dark:border-slate-750 rounded text-[9px]"
+                  />
+                </div>
+                <div className="space-y-0.5">
+                  <span className="text-[9px] text-slate-400 font-bold font-mono">End Date</span>
+                  <input
+                    type="date"
+                    value={filterEndDate}
+                    onChange={(e) => setFilterEndDate(e.target.value)}
+                    className="w-full bg-white dark:bg-slate-850 p-1 border border-slate-201 dark:border-slate-750 rounded text-[9px]"
+                  />
+                </div>
+
               </div>
 
-              {/* Clear filters trigger */}
-              <div className="flex justify-end pt-1">
-                <button
-                  type="button"
-                  onClick={() => {
-                    setFilterCategory('All');
-                    setFilterPaymentMode('All');
-                    setFilterMonth('All');
-                    setFilterYear('All');
-                  }}
-                  className="text-[10px] bg-slate-200 dark:bg-slate-800 px-2 py-1 rounded text-slate-600 dark:text-slate-400 hover:underline cursor-pointer"
-                >
-                  Reset Filters
-                </button>
-              </div>
+              {/* Reset filter options */}
+              <button
+                onClick={() => {
+                  setFilterType('All');
+                  setFilterMonth('All');
+                  setFilterYear('All');
+                  setFilterCategory('All');
+                  setFilterPaymentMode('All');
+                  setFilterPerson('');
+                  setFilterMinAmount('');
+                  setFilterMaxAmount('');
+                  setFilterStartDate('');
+                  setFilterEndDate('');
+                }}
+                className="w-full py-1 bg-slate-200 hover:bg-slate-300 dark:bg-slate-800 dark:hover:bg-slate-750 text-slate-650 dark:text-slate-300 rounded font-bold uppercase tracking-wider text-[9px] font-mono mt-2"
+              >
+                Clear Advanced Filters
+              </button>
             </motion.div>
           )}
         </AnimatePresence>
 
-        {/* Render Transaction Record list */}
-        <div className="space-y-2 mt-2 max-h-80 overflow-y-auto pr-1 scrollbar-thin">
-          {filteredExpenses.length === 0 ? (
-            <p className="text-xs text-slate-400 text-center py-6 italic">No expenses found matching the criteria.</p>
-          ) : (
-            filteredExpenses.map((exp) => (
+        {/* ledger list */}
+        <div className="space-y-2 max-h-96 overflow-y-auto">
+          {filteredLedger.map(e => {
+            const activeType = e.transactionType || 'Expense';
+            
+            // Style settings depending on transaction classifications
+            let textClass = 'text-rose-500';
+            if (activeType === 'Income') textClass = 'text-emerald-500';
+            else if (activeType === 'LoanGiven') textClass = 'text-indigo-400';
+            else if (activeType === 'LoanTaken') textClass = 'text-amber-500';
+            else if (activeType === 'Transfer') textClass = 'text-slate-400';
+
+            return (
               <div 
-                key={exp.id} 
-                onClick={() => setSelectedDetailExpense(exp)}
-                className="bg-slate-50 dark:bg-slate-900 p-3 rounded-lg flex items-center justify-between border border-slate-100 dark:border-slate-800 hover:border-indigo-200 dark:hover:border-indigo-950/40 hover:bg-slate-100/50 dark:hover:bg-slate-850 cursor-pointer group transition-all min-w-0 overflow-hidden"
+                key={e.id}
+                className="p-3 bg-slate-50 dark:bg-slate-900 border border-slate-105 dark:border-slate-850/80 rounded-xl hover:bg-slate-100/40 transition-all flex flex-col justify-between cursor-pointer"
+                onClick={() => setSelectedDetailExpense(e)}
               >
-                <div className="space-y-1 flex-1 min-w-0 pr-2">
-                  <div className="flex items-center gap-1.5 flex-wrap">
-                    <span className="text-xs font-black text-slate-800 dark:text-slate-200 truncate max-w-[130px]">
-                      {exp.category}
+                <div className="flex justify-between items-start">
+                  <div>
+                    <span className="text-[10px] font-bold text-slate-750 dark:text-slate-200 block truncate max-w-[190px]">
+                      {e.category} &middot; {e.subcategory}
                     </span>
-                    <span className="text-[9px] text-slate-400 bg-slate-200 dark:bg-slate-800 dark:text-slate-400 px-1.5 py-0.5 rounded font-mono font-medium truncate max-w-[90px]">
-                      {exp.subcategory}
+                    <span className="text-[9px] text-slate-400 block truncate max-w-[200px] mt-0.5">
+                      {e.notes}
                     </span>
+                    {e.personName && (
+                      <span className="text-[8px] bg-indigo-50 dark:bg-indigo-950/55 rounded text-indigo-650 dark:text-indigo-300 font-mono py-0.5 px-1.5 mt-1 inline-block">
+                        🗣️ Partner: {e.personName}
+                      </span>
+                    )}
                   </div>
-                  <div className="flex items-center gap-2 text-[10px] text-slate-500 whitespace-nowrap overflow-hidden text-ellipsis">
-                    <span className="font-mono bg-indigo-50 text-indigo-600 dark:bg-indigo-950/40 dark:text-indigo-400 px-1 rounded inline-block shrink-0">{exp.paymentMode}</span>
-                    <span className="shrink-0">{exp.date}</span>
-                    {exp.notes && <span className="truncate italic">({exp.notes})</span>}
+                  <div className="text-right flex flex-col items-end">
+                    <span className={`text-xs font-black font-mono ${textClass}`}>
+                      {activeType === 'Income' ? '+' : '-'} {currencySymbol} {e.amount.toLocaleString()}
+                    </span>
+                    <span className="text-[8px] text-slate-400 font-mono mt-1 block">
+                      {e.date}
+                    </span>
+                    <span className="text-[8px] uppercase font-bold text-slate-400 px-1 hover:bg-slate-200 dark:hover:bg-slate-800 rounded font-mono border border-slate-200/50 mt-1 inline-block">
+                      {activeType === 'LoanGiven' ? 'Lend' : activeType === 'LoanTaken' ? 'Borrow' : activeType}
+                    </span>
                   </div>
                 </div>
 
-                <div className="flex items-center gap-2 shrink-0">
-                  <div className="text-right shrink-0">
-                    <span className="font-mono font-black text-slate-800 dark:text-slate-100 text-xs">
-                      ₹{exp.amount.toLocaleString()}
+                <div className="flex justify-between items-center text-[10px] text-slate-405 border-t border-slate-100 dark:border-slate-800 pt-2 mt-2 leading-none">
+                  <div className="flex flex-wrap items-center gap-1.5">
+                    <span className="text-[8px] font-bold text-slate-400 bg-slate-100 dark:bg-slate-850 px-1.5 py-0.5 rounded">
+                      💳 {e.paymentMode}
                     </span>
+                    {activeType === 'Transfer' ? (
+                      <span className="text-[8px] font-bold text-slate-100 bg-emerald-600 dark:bg-emerald-750 px-1.5 py-0.5 rounded">
+                        💼 {getSourceAccountNameFromId(e.fromSourceAccountId)} ➔ {getSourceAccountNameFromId(e.toSourceAccountId)}
+                      </span>
+                    ) : (
+                      e.sourceAccountId && (
+                        <span className="text-[8px] font-bold text-indigo-650 bg-indigo-50 dark:text-indigo-300 dark:bg-indigo-950/40 px-1.5 py-0.5 rounded">
+                          💼 Account: {getSourceAccountNameFromId(e.sourceAccountId)}
+                        </span>
+                      )
+                    )}
                   </div>
-
-                  {/* Edit and Delete Buttons */}
-                  <div className="flex items-center gap-1 opacity-100 md:opacity-0 group-hover:opacity-100 transition-opacity shrink-0">
+                  <div className="flex gap-2">
                     <button
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        handleStartEdit(exp);
+                      onClick={(evt) => {
+                        evt.stopPropagation();
+                        handleStartEdit(e);
                       }}
-                      className="p-1 hover:bg-indigo-50 dark:hover:bg-indigo-950/50 text-slate-400 hover:text-indigo-600 dark:hover:text-indigo-400 rounded transition-all cursor-pointer"
-                      title="Edit entry"
+                      className="p-1 hover:text-indigo-500 rounded"
                     >
-                      <Edit3 className="h-3.5 w-3.5" />
+                      <Edit3 className="h-3 w-3" />
                     </button>
                     <button
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        onDeleteExpense(exp.id);
+                      onClick={(evt) => {
+                        evt.stopPropagation();
+                        handleDeleteItem(e.id);
                       }}
-                      className="p-1 hover:bg-red-50 dark:hover:bg-red-950/50 text-slate-400 hover:text-red-500 dark:hover:text-red-400 rounded transition-all cursor-pointer"
-                      title="Delete entry"
+                      className="p-1 hover:text-red-500 rounded"
                     >
-                      <Trash2 className="h-3.5 w-3.5" />
+                      <Trash2 className="h-3 w-3" />
                     </button>
                   </div>
                 </div>
               </div>
-            ))
+            );
+          })}
+
+          {filteredLedger.length === 0 && (
+            <p className="text-[10px] text-slate-400 text-center py-8 italic font-mono">
+              Database contains no matches found. Adjust parameters.
+            </p>
           )}
         </div>
       </div>
 
-      {/* Pop-up Modal: Transaction Detail Inspector */}
+      </div>
+
+      {/* DETAILED TRANSACTION OVERLAY POPUP */}
       <AnimatePresence>
         {selectedDetailExpense && (
-          <div className="fixed inset-0 bg-black/50 backdrop-blur-xs flex items-center justify-center p-4 z-50">
+          <div className="absolute inset-0 bg-slate-900/60 dark:bg-black/80 flex items-center justify-center p-4 z-50 text-xs font-sans">
             <motion.div
               initial={{ scale: 0.95, opacity: 0 }}
               animate={{ scale: 1, opacity: 1 }}
               exit={{ scale: 0.95, opacity: 0 }}
-              className="bg-slate-50 dark:bg-slate-900 rounded-2xl p-5 shadow-2xl border border-slate-200 dark:border-slate-800 w-full max-w-sm flex flex-col relative"
+              className="bg-white dark:bg-slate-850 p-5 rounded-2xl border border-slate-150 dark:border-slate-800 w-full max-w-xs space-y-4 shadow-2xl"
             >
-              <div className="flex items-center justify-between pb-3 border-b border-slate-150 dark:border-slate-800">
-                <span className="text-[9px] bg-slate-200 dark:bg-slate-800 text-slate-500 dark:text-slate-400 px-2.5 py-1 rounded-md font-mono uppercase tracking-wider font-black">
-                  TRANSACTION SPECIFICATIONS
-                </span>
+              <h3 className="font-bold text-slate-800 dark:text-slate-105 uppercase tracking-wide font-mono pb-2 border-b border-slate-105 dark:border-slate-705 flex justify-between items-center">
+                <span>Verification Receipt Ledger</span>
+                <button onClick={() => setSelectedDetailExpense(null)} className="text-slate-400 hover:text-red-500 cursor-pointer"><X className="h-4 w-4" /></button>
+              </h3>
+
+              <div className="space-y-2">
+                <div className="flex justify-between">
+                  <span className="text-slate-400 font-bold">Transaction Reference</span>
+                  <span className="font-mono text-[10px] text-indigo-500">{selectedDetailExpense.id}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-slate-400 font-bold">Value</span>
+                  <span className="font-black font-mono text-slate-800 dark:text-slate-100">{currencySymbol} {selectedDetailExpense.amount.toLocaleString()}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-slate-400 font-bold">Date</span>
+                  <span className="font-medium">{selectedDetailExpense.date}</span>
+                </div>
+                <div className="flex justify-between text-xs">
+                  <span className="text-slate-400 font-bold">Type Classification</span>
+                  <span className="font-bold uppercase text-indigo-600 dark:text-indigo-400">{selectedDetailExpense.transactionType || 'Expense'}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-slate-400 font-bold">General Category</span>
+                  <span>{selectedDetailExpense.category}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-slate-400 font-bold">Subcategory</span>
+                  <span>{selectedDetailExpense.subcategory}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-slate-400 font-bold">Payment Method</span>
+                  <span>{selectedDetailExpense.paymentMode}</span>
+                </div>
+                {selectedDetailExpense.personName && (
+                  <div className="flex justify-between">
+                    <span className="text-slate-400 font-bold">Partner / Entity</span>
+                    <span className="text-indigo-600 dark:text-indigo-300 font-bold">{selectedDetailExpense.personName}</span>
+                  </div>
+                )}
+                {selectedDetailExpense.parentLoanId && (
+                  <div className="bg-amber-500/5 p-2 rounded-xl border border-amber-500/20 text-[10px] text-amber-500 font-medium">
+                    🔗 Linked to loan parent record: {selectedDetailExpense.parentLoanId}
+                  </div>
+                )}
+                <div className="flex flex-col pt-1 border-t border-slate-100 dark:border-slate-800">
+                  <span className="text-slate-400 font-bold">Detailed Memo Description</span>
+                  <span className="font-medium text-slate-700 dark:text-slate-300 italic mt-0.5">&quot;{selectedDetailExpense.notes}&quot;</span>
+                </div>
+
+                <div className="flex gap-2.5 pt-3 border-t border-slate-100 dark:border-slate-800">
+                  <button
+                    onClick={() => {
+                      handleStartEdit(selectedDetailExpense);
+                      setSelectedDetailExpense(null);
+                    }}
+                    className="flex-1 py-1.5 bg-indigo-50 dark:bg-indigo-950/40 hover:bg-indigo-100 text-indigo-700 dark:text-indigo-300 rounded-lg text-[10px] font-black uppercase tracking-wider font-mono cursor-pointer transition-colors flex items-center justify-center gap-1.5"
+                  >
+                    <Edit3 className="h-3 w-3" /> Edit Item
+                  </button>
+                  <button
+                    onClick={() => {
+                      const idToDelete = selectedDetailExpense.id;
+                      setSelectedDetailExpense(null);
+                      handleDeleteItem(idToDelete);
+                    }}
+                    className="flex-1 py-1.5 bg-rose-50 dark:bg-rose-950/45 hover:bg-rose-100 text-rose-600 rounded-lg text-[10px] font-black uppercase tracking-wider font-mono cursor-pointer transition-colors flex items-center justify-center gap-1.5"
+                  >
+                    <Trash2 className="h-3 w-3" /> Delete Item
+                  </button>
+                </div>
+              </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
+
+      {/* CUSTOM CONFIRMATION OVERLAY MODAL */}
+      <AnimatePresence>
+        {confirmDeleteId && (
+          <div className="absolute inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/75 font-sans">
+            <motion.div
+              initial={{ scale: 0.95, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              exit={{ scale: 0.95, opacity: 0 }}
+              className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-5 max-w-sm w-full shadow-xl space-y-4 text-left"
+            >
+              <div className="text-center space-y-2">
+                <div className="h-12 w-12 rounded-full bg-rose-50 dark:bg-rose-950/50 text-rose-600 flex items-center justify-center mx-auto text-xl">
+                  ⚠️
+                </div>
+                <h3 className="text-sm font-black uppercase text-slate-800 dark:text-slate-100 font-mono tracking-tight">Confirm Deletion</h3>
+                <p className="text-[11px] text-slate-500 dark:text-slate-400">
+                  Are you absolutely certain you want to purge this transaction record permanently from local registers? This action cannot be undone.
+                </p>
+              </div>
+              <div className="flex gap-2.5">
                 <button
                   type="button"
-                  onClick={() => setSelectedDetailExpense(null)}
-                  className="p-1 hover:bg-slate-200 dark:hover:bg-slate-800 rounded-full text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 transition-colors cursor-pointer"
+                  onClick={() => setConfirmDeleteId(null)}
+                  className="flex-1 py-1.5 bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-755 text-slate-700 dark:text-slate-300 rounded-lg text-[10px] font-black uppercase tracking-wider font-mono cursor-pointer transition-colors"
                 >
-                  <ChevronDown className="h-5 w-5" />
+                  Cancel
                 </button>
-              </div>
-
-              <div className="py-4 space-y-4 font-sans text-left">
-                {/* Large Amount display using soft reassuring eye-pleasing teal theme */}
-                <div className="text-center py-3 bg-teal-50/50 dark:bg-teal-950/20 rounded-xl border border-teal-100/60 dark:border-teal-900/40">
-                  <span className="text-[10px] text-teal-600 dark:text-teal-400 uppercase tracking-widest block font-mono font-extrabold mb-0.5">Total Amount</span>
-                  <span className="text-2xl font-black text-teal-800 dark:text-teal-300 font-mono">
-                    ₹{selectedDetailExpense.amount.toLocaleString()}
-                  </span>
-                </div>
-
-                <div className="grid grid-cols-2 gap-3.5 text-xs">
-                  <div>
-                    <span className="text-[10px] text-slate-400 dark:text-slate-500 font-bold uppercase block mb-0.5 font-mono">Category</span>
-                    <span className="px-2.5 py-1 bg-amber-50 text-amber-800 border border-amber-200 dark:bg-amber-950/20 dark:text-amber-300 dark:border-amber-900/30 rounded font-mono font-bold block truncate text-center">
-                      {selectedDetailExpense.category}
-                    </span>
-                  </div>
-                  <div>
-                    <span className="text-[10px] text-slate-400 dark:text-slate-500 font-bold uppercase block mb-0.5 font-mono">Subcategory</span>
-                    <span className="px-2.5 py-1 bg-sky-50 text-sky-800 border border-sky-200 dark:bg-sky-950/20 dark:text-sky-300 dark:border-sky-900/30 rounded font-mono font-bold block truncate text-center">
-                      {selectedDetailExpense.subcategory}
-                    </span>
-                  </div>
-                </div>
-
-                <div className="grid grid-cols-2 gap-3.5 text-xs border-t border-slate-150 dark:border-slate-800 pt-3">
-                  <div>
-                    <span className="text-[10px] text-slate-400 dark:text-slate-500 font-bold uppercase block mb-0.5 font-mono">Date</span>
-                    <span className="font-mono text-slate-700 dark:text-slate-300 font-medium block text-center py-1">
-                      {selectedDetailExpense.date}
-                    </span>
-                  </div>
-                  <div>
-                    <span className="text-[10px] text-slate-400 dark:text-slate-500 font-bold uppercase block mb-0.5 font-mono">Payment Mode</span>
-                    <span className="px-2.5 py-1 bg-rose-50 text-rose-850 border border-rose-200 dark:bg-rose-950/20 dark:text-rose-350 dark:border-rose-900/30 rounded font-mono font-bold block truncate text-center">
-                      {selectedDetailExpense.paymentMode}
-                    </span>
-                  </div>
-                </div>
-
-                <div className="border-t border-slate-150 dark:border-slate-800 pt-3 text-xs font-sans">
-                  <span className="text-[10px] text-slate-400 dark:text-slate-500 font-bold uppercase block mb-1 font-mono">Notes & Memo</span>
-                  <p className="text-slate-600 dark:text-slate-350 bg-slate-100/50 dark:bg-slate-950/50 p-2.5 rounded-lg border border-slate-200/50 dark:border-slate-800/80 italic text-[11px] leading-relaxed max-h-24 overflow-y-auto">
-                    {selectedDetailExpense.notes || 'No description provided for this ledger entry.'}
-                  </p>
-                </div>
-              </div>
-
-              <div className="pt-2">
                 <button
                   type="button"
-                  onClick={() => setSelectedDetailExpense(null)}
-                  className="w-full py-2 bg-slate-200 hover:bg-slate-300 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 text-xs font-black uppercase tracking-wider rounded-lg transition-colors cursor-pointer border border-slate-300 dark:border-slate-700"
+                  onClick={() => {
+                    onDeleteExpense(confirmDeleteId);
+                    onTriggerNotification('Record Purged', 'Expense deleted successfully!');
+                    setConfirmDeleteId(null);
+                  }}
+                  className="flex-1 py-1.5 bg-rose-600 hover:bg-rose-700 text-white rounded-lg text-[10px] font-black uppercase tracking-wider font-mono cursor-pointer transition-colors shadow-sm shadow-rose-900/25"
                 >
-                  Close Specification
+                  Delete Record
                 </button>
               </div>
             </motion.div>
           </div>
         )}
       </AnimatePresence>
+
     </div>
   );
 }
