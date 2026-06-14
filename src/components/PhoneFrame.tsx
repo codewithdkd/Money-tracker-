@@ -351,9 +351,9 @@ export default function PhoneFrame({
   };
 
   return (
-    <div className="relative p-2 sm:p-6 flex items-center justify-center bg-transparent min-h-screen">
+    <div className="relative p-2 sm:p-4 flex items-center justify-center bg-transparent w-full">
       {/* Luxurious Physical Phone Hardware Case */}
-      <div className="w-[395px] max-w-full h-[810px] bg-slate-950 dark:bg-slate-950 rounded-[48px] p-3 shadow-[0_25px_60px_-15px_rgba(91,61,245,0.3)] border-4 border-[#5B3DF5] dark:border-[#7C5CFF] flex flex-col justify-between overflow-hidden relative group/frame transition-all duration-300 ring-4 ring-slate-900/40 dark:ring-slate-900/80">
+      <div className="w-[395px] max-w-[calc(100vw-16px)] h-[810px] max-h-[calc(100vh-16px)] sm:max-h-[810px] bg-slate-950 dark:bg-slate-950 rounded-[48px] p-3 shadow-[0_25px_60px_-15px_rgba(91,61,245,0.3)] border-4 border-[#5B3DF5] dark:border-[#7C5CFF] flex flex-col justify-between overflow-hidden relative group/frame transition-all duration-300 ring-4 ring-slate-900/40 dark:ring-slate-900/80">
         
         {/* Sleek Side Hardware Buttons (Power/Volume) */}
         <div className="absolute top-28 -right-0.5 w-[3px] h-10 bg-[#5B3DF5] rounded-l-md" />
