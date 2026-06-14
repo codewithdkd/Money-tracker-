@@ -90,6 +90,7 @@ const DEFAULT_SETTINGS: AppSettings = {
   userName: 'User',
   alertThresholdPercentage: 80,
   darkMode: true,
+  themePreference: 'system',
   backupFrequency: 'Daily',
   reminderFrequency: 'Every 2 Hours',
   lastBackupDate: 'Never Sync',
@@ -295,8 +296,11 @@ export class DbSim {
     const parsed = JSON.parse(raw);
     if (!parsed.currency) {
       parsed.currency = '₹';
-      localStorage.setItem('et_settings', JSON.stringify(parsed));
     }
+    if (!parsed.themePreference) {
+      parsed.themePreference = parsed.darkMode ? 'dark' : 'light';
+    }
+    localStorage.setItem('et_settings', JSON.stringify(parsed));
     return parsed;
   }
 

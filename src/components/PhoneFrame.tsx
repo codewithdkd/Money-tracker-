@@ -351,46 +351,53 @@ export default function PhoneFrame({
   };
 
   return (
-    <div className="flex flex-col items-center justify-center p-2 lg:p-6 bg-slate-100 dark:bg-slate-950/40 min-h-full">
-      {/* Dynamic Sound warning popup banner */}
-      <AnimatePresence>
-        {incomingAlert && (
-          <motion.div
-            initial={{ opacity: 0, y: -50, scale: 0.9 }}
-            animate={{ opacity: 1, y: 0, scale: 1 }}
-            exit={{ opacity: 0, y: -20, scale: 0.9 }}
-            className="fixed top-4 z-100 bg-amber-500 text-white rounded-xl py-3 px-4 shadow-xl flex items-center justify-between gap-3 max-w-sm border border-amber-400 border-l-4 border-l-red-600 cursor-pointer"
-            onClick={() => {
-              setIncomingAlert(null);
-              setActiveTab('add');
-            }}
-          >
-            <div className="flex gap-2 items-start">
-              <span className="p-1.5 bg-white/20 rounded-lg text-white mt-0.5">
-                <Bell className="h-4 w-4 animate-swing" />
-              </span>
-              <div>
-                <h4 className="text-xs font-bold leading-none">{incomingAlert.title}</h4>
-                <p className="text-[10px] text-amber-50 mt-1 leading-normal">{incomingAlert.message}</p>
-              </div>
-            </div>
-          </motion.div>
-        )}
-      </AnimatePresence>
-
-      {/* Frame wrapper mimicking luxurious Pixel phone hardware */}
-      <div className="w-[390px] max-w-full h-[780px] bg-slate-950 rounded-[40px] p-3 shadow-[0_25px_60px_-15px_rgba(0,0,0,0.5)] border-4 border-slate-900 flex flex-col justify-between overflow-hidden relative group/frame">
+    <div className="relative p-2 sm:p-6 flex items-center justify-center bg-transparent min-h-screen">
+      {/* Luxurious Physical Phone Hardware Case */}
+      <div className="w-[395px] max-w-full h-[810px] bg-slate-950 dark:bg-slate-950 rounded-[48px] p-3 shadow-[0_25px_60px_-15px_rgba(91,61,245,0.3)] border-4 border-[#5B3DF5] dark:border-[#7C5CFF] flex flex-col justify-between overflow-hidden relative group/frame transition-all duration-300 ring-4 ring-slate-900/40 dark:ring-slate-900/80">
         
-        {/* Dynamic camera notch pinhole */}
-        <div className="absolute top-4 left-1/2 -translate-x-1/2 h-4 w-12 bg-black rounded-full z-45 flex items-center justify-center gap-1">
-          <div className="h-1.5 w-1.5 rounded-full bg-slate-900 border border-slate-800" />
-          <div className="h-0.5 w-[14px] rounded-full bg-slate-900" />
+        {/* Sleek Side Hardware Buttons (Power/Volume) */}
+        <div className="absolute top-28 -right-0.5 w-[3px] h-10 bg-[#5B3DF5] rounded-l-md" />
+        <div className="absolute top-44 -right-0.5 w-[3px] h-14 bg-slate-800 rounded-l-md" />
+        <div className="absolute top-64 -right-0.5 w-[3px] h-14 bg-slate-800 rounded-l-md" />
+
+        {/* Dynamic Premium Dynamic Island / Notch layout */}
+        <div className="absolute top-5 left-1/2 -translate-x-1/2 h-5 w-24 bg-black rounded-full z-45 flex items-center justify-center gap-2 border border-slate-800 shadow-inner">
+          <div className="h-2 w-2 rounded-full bg-[#121620] border border-slate-800 flex items-center justify-center">
+            <div className="h-1 w-1 rounded-full bg-indigo-500/80" />
+          </div>
+          <div className="h-1 w-10 bg-slate-900 rounded-full" />
         </div>
 
+        {/* Dynamic Sound warning popup banner */}
+        <AnimatePresence>
+          {incomingAlert && (
+            <motion.div
+              initial={{ opacity: 0, y: -50, scale: 0.9 }}
+              animate={{ opacity: 1, y: 0, scale: 1 }}
+              exit={{ opacity: 0, y: -20, scale: 0.9 }}
+              className="fixed top-4 z-100 bg-amber-500 text-white rounded-xl py-3 px-4 shadow-xl flex items-center justify-between gap-3 max-w-sm border border-amber-400 border-l-4 border-l-red-600 cursor-pointer"
+              onClick={() => {
+                setIncomingAlert(null);
+                setActiveTab('add');
+              }}
+            >
+              <div className="flex gap-2 items-start">
+                <span className="p-1.5 bg-white/20 rounded-lg text-white mt-0.5">
+                  <Bell className="h-4 w-4 animate-swing" />
+                </span>
+                <div>
+                  <h4 className="text-xs font-bold leading-none">{incomingAlert.title}</h4>
+                  <p className="text-[10px] text-amber-50 mt-1 leading-normal">{incomingAlert.message}</p>
+                </div>
+              </div>
+            </motion.div>
+          )}
+        </AnimatePresence>
+
         {/* Screen layout container */}
-        <div className={`flex-1 flex flex-col overflow-hidden rounded-[28px] border border-slate-900 ${settings.darkMode ? 'dark bg-slate-900' : 'bg-slate-50'} transition-colors duration-300 relative`}>
-          
-          {/* Top Status Indicators bar */}
+        <div className={`flex-1 flex flex-col overflow-hidden rounded-[34px] border border-slate-900 ${settings.darkMode ? 'dark bg-slate-900' : 'bg-slate-50'} transition-colors duration-300 relative`}>
+            
+            {/* Top Status Indicators bar */}
           <div className="h-11 px-6 bg-slate-100 dark:bg-slate-900 flex items-center justify-between z-40 text-slate-500 dark:text-slate-400 select-none border-b border-slate-100 dark:border-slate-850">
             <div className="flex items-center gap-1 text-[11px] font-black font-mono">
               <Calendar className="h-3 w-3 text-indigo-500" />

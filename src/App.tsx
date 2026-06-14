@@ -43,13 +43,6 @@ export default function App() {
     setBudgets(rawBudgets);
     setMoneySources(rawSources);
     setSettings(rawSettings);
-
-    // Apply global body dark class reflecting settings
-    if (rawSettings.darkMode) {
-      document.documentElement.classList.add('dark');
-    } else {
-      document.documentElement.classList.remove('dark');
-    }
   };
 
   const handleAddCategory = (newCat: VirtualCategory) => {
@@ -62,41 +55,72 @@ export default function App() {
     setIsLocked(true);
   };
 
-  // Toggle Dark/Light mode globally tracking the emulator settings
+  // Sync class name list and listener with dynamic theme selection
   useEffect(() => {
-    if (settings.darkMode) {
-      document.documentElement.classList.add('dark');
-    } else {
-      document.documentElement.classList.remove('dark');
+    const applyThemeProperties = () => {
+      const pref = settings.themePreference;
+      if (pref === 'light') {
+        document.documentElement.classList.remove('dark');
+      } else if (pref === 'dark') {
+        document.documentElement.classList.add('dark');
+      } else {
+        // system theme or legacy setting model
+        const systemDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
+        if (pref === 'system') {
+          if (systemDark) {
+            document.documentElement.classList.add('dark');
+          } else {
+            document.documentElement.classList.remove('dark');
+          }
+        } else {
+          // fallback to darkMode boolean
+          if (settings.darkMode) {
+            document.documentElement.classList.add('dark');
+          } else {
+            document.documentElement.classList.remove('dark');
+          }
+        }
+      }
+    };
+
+    applyThemeProperties();
+
+    if (settings.themePreference === 'system' || !settings.themePreference) {
+      const mediaQuery = window.matchMedia('(prefers-color-scheme: dark)');
+      const listener = () => applyThemeProperties();
+      if (mediaQuery.addEventListener) {
+        mediaQuery.addEventListener('change', listener);
+      } else {
+        mediaQuery.addListener(listener);
+      }
+      return () => {
+        if (mediaQuery.removeEventListener) {
+          mediaQuery.removeEventListener('change', listener);
+        } else {
+          mediaQuery.removeListener(listener);
+        }
+      };
     }
-  }, [settings.darkMode]);
+  }, [settings.themePreference, settings.darkMode]);
 
   return (
-    <div className="min-h-screen w-screen bg-slate-100 dark:bg-slate-950 flex flex-col lg:flex-row overflow-hidden">
-      {/* Interactive Mobile Emulator Block */}
-      <div className="flex-1 flex flex-col justify-center items-center p-4 overflow-y-auto lg:overflow-hidden select-none">
-        <PhoneFrame
-          onAddCategory={handleAddCategory}
-          expenses={expenses}
-          categories={categories}
-          budgets={budgets}
-          moneySources={moneySources}
-          settings={settings}
-          setExpenses={setExpenses}
-          setCategories={setCategories}
-          setBudgets={setBudgets}
-          setMoneySources={setMoneySources}
-          setSettings={setSettings}
-          onLockApp={handleLockApp}
-          isLocked={isLocked}
-          setIsLocked={setIsLocked}
-        />
-      </div>
-
-      {/* Flutter Mobile Specifications & Dart SQLite Code Base panel */}
-      <div className="w-full lg:w-[480px] xl:w-[580px] border-t lg:border-t-0 lg:border-l border-slate-200 dark:border-slate-800 flex flex-col bg-slate-900 overflow-hidden h-96 lg:h-full">
-        <FlutterCodeCenter />
-      </div>
+    <div className="min-h-screen w-screen bg-[#EFE8DC] dark:bg-[#131420] flex flex-col justify-center items-center p-2 overflow-y-auto select-none">
+      <PhoneFrame
+        onAddCategory={handleAddCategory}
+        expenses={expenses}
+        categories={categories}
+        budgets={budgets}
+        moneySources={moneySources}
+        settings={settings}
+        setExpenses={setExpenses}
+        setCategories={setCategories}
+        setBudgets={setBudgets}
+        setMoneySources={setMoneySources}
+        setSettings={setSettings}
+        onLockApp={handleLockApp}
+        isLocked={isLocked}
+        setIsLocked={setIsLocked}
+      />
     </div>
   );
 }

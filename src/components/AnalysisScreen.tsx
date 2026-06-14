@@ -47,6 +47,22 @@ interface AnalysisScreenProps {
 }
 
 export default function AnalysisScreen({ expenses, moneySources = [], currencySymbol = '₹' }: AnalysisScreenProps) {
+  const isDarkTheme = typeof document !== 'undefined' && document.documentElement.classList.contains('dark');
+  const themePrimary = isDarkTheme ? '#3B82F6' : '#2563EB';
+  const themeSuccess = isDarkTheme ? '#22C55E' : '#16A34A';
+  const themeWarning = isDarkTheme ? '#FBBF24' : '#F59E0B';
+  const themeError = isDarkTheme ? '#EF4444' : '#DC2626';
+  
+  const themeTextSec = isDarkTheme ? '#CBD5E1' : '#6B7280';
+  const themeTooltipBg = isDarkTheme ? '#1E293B' : '#FFFFFF';
+  const themeTooltipColor = isDarkTheme ? '#F8FAFC' : '#111827';
+  const themeTooltipBorder = isDarkTheme ? '1px solid #334155' : '1px solid #E5E7EB';
+
+  const chartColorsPalette = [
+    themePrimary, themeSuccess, themeWarning, themeError,
+    '#8b5cf6', '#06b6d4', '#ec4899', '#14b8a6', '#f43f5e', '#a855f7', '#84cc16'
+  ];
+
   // Navigation tabs within Analysis
   const [activeAnalysisMode, setActiveAnalysisMode] = useState<'trends' | 'compare' | 'calendar' | 'sources'>('trends');
   const [selectedDetailExpense, setSelectedDetailExpense] = useState<VirtualExpense | null>(null);
@@ -250,10 +266,7 @@ export default function AnalysisScreen({ expenses, moneySources = [], currencySy
         totals[e.category] = (totals[e.category] || 0) + e.amount;
       });
 
-    const colors = [
-      '#6366f1', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6', '#06b6d4',
-      '#ec4899', '#14b8a6', '#f43f5e', '#a855f7', '#3b82f6', '#84cc16'
-    ];
+    const colors = chartColorsPalette;
     return Object.entries(totals)
       .map(([name, value], i) => ({
         name,
@@ -494,12 +507,12 @@ export default function AnalysisScreen({ expenses, moneySources = [], currencySy
             <div className="h-44 w-full pt-1">
               <ResponsiveContainer width="100%" height="100%">
                 <BarChart data={dynamicMonthlyCashflows}>
-                  <XAxis dataKey="name" stroke="#888888" fontSize={9} tickLine={false} axisLine={false} />
-                  <YAxis stroke="#888888" fontSize={9} tickLine={false} axisLine={false} width={30} />
-                  <Tooltip cursor={{ fill: 'rgba(99,102,241,0.06)' }} contentStyle={{ background: '#1e293b', border: 'none', borderRadius: '8px', fontSize: '9px', color: '#fff' }} />
+                  <XAxis dataKey="name" stroke={themeTextSec} fontSize={9} tickLine={false} axisLine={false} />
+                  <YAxis stroke={themeTextSec} fontSize={9} tickLine={false} axisLine={false} width={30} />
+                  <Tooltip cursor={{ fill: 'rgba(59,130,246,0.06)' }} contentStyle={{ background: themeTooltipBg, border: themeTooltipBorder, borderRadius: '8px', fontSize: '9px', color: themeTooltipColor }} />
                   <Legend wrapperStyle={{ fontSize: '9px', marginTop: 5 }} />
-                  <Bar dataKey="Inflow" fill="#10b981" radius={[4, 4, 0, 0]} />
-                  <Bar dataKey="Outflow" fill="#f59e0b" radius={[4, 4, 0, 0]} />
+                  <Bar dataKey="Inflow" fill={themeSuccess} radius={[4, 4, 0, 0]} />
+                  <Bar dataKey="Outflow" fill={themeWarning} radius={[4, 4, 0, 0]} />
                 </BarChart>
               </ResponsiveContainer>
             </div>
@@ -590,9 +603,9 @@ export default function AnalysisScreen({ expenses, moneySources = [], currencySy
               <div className="h-28 w-full pt-1.5">
                 <ResponsiveContainer width="100%" height="100%">
                   <LineChart data={selectedCategoryHistoryData}>
-                    <XAxis dataKey="month" stroke="#a1a1aa" fontSize={8} tickLine={false} axisLine={false} />
-                    <Tooltip contentStyle={{ background: '#090d16', border: 'none', borderRadius: '6px', fontSize: '8px', color: '#fff' }} />
-                    <Line type="monotone" dataKey="amount" stroke="#6366f1" strokeWidth={2.5} activeDot={{ r: 4 }} />
+                    <XAxis dataKey="month" stroke={themeTextSec} fontSize={8} tickLine={false} axisLine={false} />
+                    <Tooltip contentStyle={{ background: themeTooltipBg, border: themeTooltipBorder, borderRadius: '6px', fontSize: '8px', color: themeTooltipColor }} />
+                    <Line type="monotone" dataKey="amount" stroke={themePrimary} strokeWidth={2.5} activeDot={{ r: 4 }} />
                   </LineChart>
                 </ResponsiveContainer>
               </div>
@@ -1041,12 +1054,12 @@ export default function AnalysisScreen({ expenses, moneySources = [], currencySy
             <div className="h-44 w-full pt-2">
               <ResponsiveContainer width="100%" height="100%">
                 <LineChart data={sourceMonthlyTrends}>
-                  <XAxis dataKey="month" stroke="#a1a1aa" fontSize={8} tickLine={false} axisLine={false} />
-                  <YAxis stroke="#a1a1aa" fontSize={8} tickLine={false} axisLine={false} width={30} />
-                  <Tooltip contentStyle={{ background: '#1e293b', border: 'none', borderRadius: '8px', fontSize: '8px', color: '#fff' }} />
+                  <XAxis dataKey="month" stroke={themeTextSec} fontSize={8} tickLine={false} axisLine={false} />
+                  <YAxis stroke={themeTextSec} fontSize={8} tickLine={false} axisLine={false} width={30} />
+                  <Tooltip contentStyle={{ background: themeTooltipBg, border: themeTooltipBorder, borderRadius: '8px', fontSize: '8px', color: themeTooltipColor }} />
                   <Legend wrapperStyle={{ fontSize: '8px', marginTop: 5 }} />
                   {moneySources.map((s, idx) => {
-                    const colors = ['#6366f1', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6', '#06b6d4'];
+                    const colors = chartColorsPalette;
                     return (
                       <Line 
                         key={s.id} 

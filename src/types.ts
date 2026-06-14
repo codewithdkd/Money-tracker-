@@ -58,6 +58,7 @@ export interface AppSettings {
   categoryThresholds?: Record<string, number>; // Map of category names to specific alert percentages (e.g. {"Food": 75})
   overallThresholdPercentage?: number; // Customizable overall total budget threshold percentage
   darkMode: boolean;
+  themePreference?: 'light' | 'dark' | 'system';
   backupFrequency: 'Daily' | 'Weekly' | 'Monthly';
   reminderFrequency: 'Every 1 Hour' | 'Every 2 Hours' | 'Every 4 Hours' | 'Disabled';
   lastBackupDate: string | null;

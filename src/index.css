@@ -1,54 +1,209 @@
 @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=JetBrains+Mono:wght@400;500;700&family=Space+Grotesk:wght@400;500;600;700;750&display=swap');
 @import "tailwindcss";
 
-@theme {
-  --color-slate-50: #0D1730;
-  --color-slate-100: #E6EBF5;
-  --color-slate-150: #1C2B44;
-  --color-slate-200: #B4C0D4;
-  --color-slate-205: #1C2B44; 
-  --color-slate-300: #9AA6B8;
-  --color-slate-400: #A7B1C2;
-  --color-slate-450: #8896AB;
-  --color-slate-550: #718096;
+:root {
+  --app-bg: #F5F1E8;             /* soft warm cream */
+  --app-secondary-bg: #EFE8DC;   /* darker secondary cream */
+  --app-card: #FCFAF6;           /* slightly lighter warm cozy card */
+  --app-card-elevated: #FFFFFF;  /* elevated pure white cards */
+  --app-primary: #5B3DF5;        /* premium royal purple accent */
+  --app-primary-hover: #4C2FE0;  /* deep purple hover */
+  --app-primary-light: #EEE9FF;  /* soft violet wrapper tint */
   
-  --color-slate-800: #172338;
-  --color-slate-850: #1A2740;
-  --color-slate-900: #08111F;
-  --color-slate-950: #050B14;
+  --app-success: #16A34A;
+  --app-success-light: #DCFCE7;
+  --app-warning: #F59E0B;
+  --app-warning-light: #FEF3C7;
+  --app-error: #DC2626;
+  --app-error-light: #FEE2E2;
   
-  /* Keep standard theme white to avoid styling confusion */
-  --color-white: #FFFFFF;
+  --app-text-primary: #1F2937;
+  --app-text-secondary: #6B7280;
+  --app-text-muted: #9CA3AF;
+  --app-border: #E6DED1;         /* soft designer layout border */
+  --app-divider: #F0E9DD;        /* extremely thin divider */
   
-  /* Accent purples & indigo violet */
-  --color-indigo-400: #7A6BFF;
-  --color-indigo-500: #5B4CFF;
-  --color-indigo-600: #5B4CFF;
-  --color-indigo-700: #6C5CFF;
-  --color-indigo-800: #574FD3;
-  --color-indigo-900: #111438;
-  --color-indigo-950: #0A0B1E;
-  
-  /* Text defaults */
-  --color-slate-700: #E6EBF5;
-  --color-slate-600: #A7B1C2;
+  --input-bg: #FFFFFF;
+  --input-border: #E6DED1;
+  --input-text: #1F2937;
+  --tag-bg: #EFE8DC;
+  --tag-text: #1F2937;
+}
 
+.dark {
+  --app-bg: #0D0E15;             /* sleek obsidian midnight background */
+  --app-secondary-bg: #131420;   /* secondary deep block */
+  --app-card: #181926;           /* elegant dark visual card */
+  --app-card-elevated: #212335;  /* highlight elevated card / input */
+  --app-primary: #7C5CFF;        /* vibrant light neon purple for visibility */
+  --app-primary-hover: #6949F5;
+  --app-primary-light: #24203B;
+  
+  --app-success: #22C55E;
+  --app-success-light: #122C1C;
+  --app-warning: #FBBF24;
+  --app-warning-light: #342710;
+  --app-error: #EF4444;
+  --app-error-light: #351515;
+  
+  --app-text-primary: #F8FAFC;
+  --app-text-secondary: #CBD5E1;
+  --app-text-muted: #94A3B8;
+  --app-border: #23253A;         /* luxury dark slate divider border */
+  --app-divider: #1A1C2C;
+  
+  --input-bg: #181926;
+  --input-border: #23253A;
+  --input-text: #F8FAFC;
+  --tag-bg: #212335;
+  --tag-text: #F8FAFC;
+}
+
+@theme {
   --font-sans: "Space Grotesk", "Inter", ui-sans-serif, system-ui, sans-serif;
   --font-mono: "JetBrains Mono", ui-monospace, SFMono-Regular, monospace;
 }
 
 @layer base {
   body {
-    background-color: #08111F;
-    color: #FFFFFF;
+    background-color: var(--app-bg);
+    color: var(--app-text-primary);
     font-family: var(--font-sans);
   }
 }
 
 @layer utilities {
-  /* Override bg-white to match our dark elevated fintech surface card backgrounds */
-  .bg-white {
-    background-color: #172338 !important;
+  /* Dynamic Backgrounds & Premium Card Shadows instead of harsh borders */
+  .bg-white, .bg-slate-800, .bg-slate-850 {
+    background-color: var(--app-card) !important;
+    box-shadow: 0 4px 20px -2px rgba(91, 61, 245, 0.05), 0 2px 8px -1px rgba(91, 61, 245, 0.03) !important;
+    border-color: var(--app-divider) !important;
+  }
+  
+  /* Slate environments translate fully to main backgrounds */
+  .bg-slate-50, .bg-slate-100, .bg-slate-900, .bg-slate-950, .bg-slate-900\/60, .bg-slate-900\/40 {
+    background-color: var(--app-bg) !important;
+  }
+  
+  /* Elevate components, input controls, specific blocks */
+  .bg-card-elevated, .bg-white-elevated {
+    background-color: var(--app-card-elevated) !important;
+  }
+  
+  /* Input structures */
+  input, select, textarea {
+    background-color: var(--input-bg) !important;
+    border-color: var(--input-border) !important;
+    color: var(--input-text) !important;
+  }
+  
+  /* Tag areas & interactive background wrappers */
+  .bg-indigo-50, .bg-slate-50\/40, .bg-slate-900\/40 {
+    background-color: var(--tag-bg) !important;
+  }
+  
+  /* Text color rules: Primary */
+  .text-slate-800, .text-slate-900, .text-slate-700, .text-slate-650, .text-gray-900, .text-indigo-950, .text-white {
+    color: var(--app-text-primary) !important;
+  }
+  .text-slate-100, .text-slate-200, .text-slate-250, .text-slate-300 {
+    color: var(--app-text-primary) !important;
+  }
+  
+  /* Text color rules: Secondary */
+  .text-slate-400, .text-slate-500, .text-slate-600, .text-gray-500, .text-slate-350, .text-slate-450, .text-slate-300\/80 {
+    color: var(--app-text-secondary) !important;
+  }
+  
+  /* Text color rules: Muted / Inactive */
+  .text-slate-400\/60, .text-slate-500\/60, .text-gray-400 {
+    color: var(--app-text-muted) !important;
+  }
+  
+  /* Border elements */
+  .border-slate-100, .border-slate-105, .border-slate-150, .border-slate-200, .border-slate-205, .border-slate-250, .border-slate-700, .border-slate-800, .border-slate-805, .border-slate-850 {
+    border-color: var(--app-border) !important;
+  }
+  
+  /* Primary Royal Purple brand colors */
+  .bg-indigo-600, .bg-indigo-650, .bg-[#4f46e5], .bg-[#5B4CFF], .bg-indigo-500 {
+    background-color: var(--app-primary) !important;
+    color: #FFFFFF !important;
+  }
+  .hover\:bg-indigo-700:hover, .hover\:bg-indigo-600:hover {
+    background-color: var(--app-primary-hover) !important;
+  }
+  .bg-indigo-50 {
+    background-color: var(--app-primary-light) !important;
+  }
+  .text-indigo-600, .text-[#5B4CFF], .text-[#5B3DF5], .text-indigo-450, .text-indigo-400, .text-indigo-650, .text-[#4f46e5], .text-indigo-500, .text-indigo-300 {
+    color: var(--app-primary) !important;
+  }
+  .border-indigo-500\/20, .border-indigo-150\/40, .border-indigo-200, .border-indigo-100 {
+    border-color: var(--app-primary) !important;
+  }
+  
+  /* Success states configuration */
+  .bg-emerald-500, .bg-emerald-600, .bg-emerald-500\/10, .bg-emerald-500\/20 {
+    background-color: var(--app-success) !important;
+  }
+  .bg-emerald-50 {
+    background-color: var(--app-success-light) !important;
+  }
+  .text-emerald-500, .text-emerald-650, .text-emerald-600, .text-emerald-400, .text-emerald-700 {
+    color: var(--app-success) !important;
+  }
+  .border-emerald-500\/20, .border-emerald-500\/30, .border-emerald-200 {
+    border-color: var(--app-success) !important;
+  }
+  
+  /* Warning states configuration */
+  .bg-amber-500, .bg-amber-600, .bg-amber-500\/10, .bg-amber-500\/20 {
+    background-color: var(--app-warning) !important;
+  }
+  .bg-amber-50 {
+    background-color: var(--app-warning-light) !important;
+  }
+  .text-amber-500, .text-amber-600, .text-amber-400, .text-amber-700 {
+    color: var(--app-warning) !important;
+  }
+  
+  /* Error states configuration */
+  .bg-rose-500, .bg-rose-600, .bg-red-500, .bg-red-650, .bg-red-500\/10 {
+    background-color: var(--app-error) !important;
+  }
+  .bg-rose-50, .bg-red-50 {
+    background-color: var(--app-error-light) !important;
+  }
+  .text-rose-500, .text-rose-600, .text-rose-455, .text-rose-400, .text-red-500, .text-red-600, .text-red-700 {
+    color: var(--app-error) !important;
+  }
+  .border-rose-505\/20, .border-rose-250, .border-rose-905\/40, .border-red-500, .border-red-200 {
+    border-color: var(--app-error) !important;
+  }
+  
+  /* Bottom navigation tab elements: inactive #94A3B8, active #5B3DF5 */
+  .h-16 .text-slate-400 {
+    color: #94A3B8 !important;
+  }
+  .h-16 .text-indigo-600, .h-16 .text-indigo-400 {
+    color: var(--app-primary) !important;
+  }
+  
+  /* Interactive Keypad buttons for PIN screens (White back, soft shadows, dark texts) */
+  .grid-cols-3 button.h-14.w-14 {
+    background-color: #FFFFFF !important;
+    color: #1F2937 !important;
+    box-shadow: 0 4px 14px rgba(91, 61, 245, 0.08) !important;
+    border: 1px solid #E6DED1 !important;
+  }
+  
+  /* Keep verify action button pristine purple */
+  .grid-cols-3 button.h-14.w-14.bg-indigo-600, 
+  .grid-cols-3 button.h-14.w-14.bg-[#4f46e5] {
+    background-color: var(--app-primary) !important;
+    color: #FFFFFF !important;
+    border: none !important;
   }
 }
 
@@ -59,39 +214,39 @@
 }
 
 ::-webkit-scrollbar-track {
-  background: #08111F;
+  background: var(--app-bg);
   border-radius: 99px;
 }
 
 ::-webkit-scrollbar-thumb {
-  background: #1D2E4D;
+  background: var(--app-border);
   border-radius: 99px;
 }
 
 ::-webkit-scrollbar-thumb:hover {
-  background: #5B4CFF;
+  background: var(--app-primary);
 }
 
-/* Custom visual glow classes */
+/* Custom premium visual glow and premium gradients styling */
 .glow-primary {
-  box-shadow: 0 0 20px rgba(91, 76, 255, 0.35);
+  box-shadow: 0 0 20px rgba(91, 61, 245, 0.25);
 }
 
 .glow-primary:hover {
-  box-shadow: 0 0 25px rgba(91, 76, 255, 0.55);
+  box-shadow: 0 0 25px rgba(91, 61, 245, 0.45);
 }
 
 .gradient-premium-purple {
-  background: linear-gradient(135deg, #5B4CFF 0%, #6C5CFF 50%, #7A6BFF 100%);
+  background: linear-gradient(135deg, var(--app-primary) 0%, var(--app-primary) 100%);
 }
 
-/* Premium Custom Range Sliders */
+/* Premium Custom Range Sliders mapped dynamically */
 input[type="range"] {
   -webkit-appearance: none;
   appearance: none;
   width: 100%;
   height: 7px;
-  background: #1C2B44 !important; /* Visual track background corresponding to deep slate theme */
+  background: var(--app-border) !important;
   border-radius: 99px;
   outline: none;
 }
@@ -102,30 +257,28 @@ input[type="range"]::-webkit-slider-thumb {
   width: 16px;
   height: 16px;
   border-radius: 50%;
-  background: #5B4CFF; /* Royal purple accent matching main applet colors */
+  background: var(--app-primary);
   cursor: pointer;
-  border: 1.5px solid #FFFFFF;
-  box-shadow: 0 0 10px rgba(91, 76, 255, 0.8);
+  border: 1.5px solid var(--app-card);
+  box-shadow: 0 0 6px var(--app-primary);
   transition: transform 0.15s ease-in-out, background-color 0.15s;
 }
 
 input[type="range"]::-webkit-slider-thumb:hover {
   transform: scale(1.25);
-  background-color: #7A6BFF;
 }
 
 input[type="range"]::-moz-range-thumb {
   width: 16px;
   height: 16px;
-  border: 1.5px solid #FFFFFF;
+  border: 1.5px solid var(--app-card);
   border-radius: 50%;
-  background: #5B4CFF;
+  background: var(--app-primary);
   cursor: pointer;
-  box-shadow: 0 0 10px rgba(91, 76, 255, 0.8);
+  box-shadow: 0 0 6px var(--app-primary);
   transition: transform 0.15s ease-in-out, background-color 0.15s;
 }
 
 input[type="range"]::-moz-range-thumb:hover {
   transform: scale(1.25);
-  background-color: #7A6BFF;
 }

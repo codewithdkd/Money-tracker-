@@ -773,6 +773,56 @@ export default function SettingsScreen({
         </div>
       </div>
 
+      {/* BLOCK 1B: SYSTEM THEME PREFERENCE CONTROLLER */}
+      <div className="bg-white dark:bg-slate-850 p-3.5 rounded-2xl border border-slate-100 dark:border-slate-800 shadow-sm space-y-2">
+        <div className="flex justify-between items-center pb-1">
+          <h3 className="text-[10px] font-black uppercase text-slate-400 dark:text-slate-400 tracking-wider font-mono">
+            Application Theme / UI Style
+          </h3>
+          <span className="bg-indigo-50 dark:bg-indigo-950/40 text-[#4f46e5] dark:text-indigo-300 font-extrabold font-mono text-[8px] px-1.5 py-0.5 rounded uppercase border border-indigo-100 dark:border-indigo-900/40">
+            Active: {settings.themePreference || (settings.darkMode ? "dark" : "light")}
+          </span>
+        </div>
+        <p className="text-[9px] text-slate-400 dark:text-slate-500 leading-normal">
+          Select light or dark user-interface colors, or let the app synchronize automatically with your device settings.
+        </p>
+        <div className="grid grid-cols-3 gap-1.5 bg-slate-50 dark:bg-slate-900/60 p-1 rounded-xl border border-slate-100 dark:border-slate-800/80">
+          {[
+            { id: "light" as const, name: "Light" },
+            { id: "dark" as const, name: "Dark" },
+            { id: "system" as const, name: "System" },
+          ].map((t) => {
+            const currentPref = settings.themePreference || (settings.darkMode ? "dark" : "light");
+            const isSelected = settings.themePreference === t.id || (t.id === 'light' && !settings.themePreference && !settings.darkMode) || (t.id === 'dark' && !settings.themePreference && settings.darkMode);
+            return (
+              <button
+                key={t.id}
+                type="button"
+                onClick={() => {
+                  const isPrefDark = t.id === 'dark' || (t.id === 'system' && window.matchMedia('(prefers-color-scheme: dark)').matches);
+                  onUpdateSettings({
+                    ...settings,
+                    themePreference: t.id,
+                    darkMode: isPrefDark,
+                  });
+                  onTriggerNotification(
+                    "Theme Style Updated",
+                    `Primary user preference has been updated to ${t.name} interface theme.`
+                  );
+                }}
+                className={`py-1.5 rounded-lg text-[10px] font-black uppercase transition-all border cursor-pointer text-center flex items-center justify-center ${
+                  isSelected
+                    ? "bg-[#4f46e5] text-white border-indigo-500/20 shadow-xs"
+                    : "bg-transparent text-slate-400 dark:text-slate-500 border-transparent hover:text-slate-500"
+                }`}
+              >
+                {t.name}
+              </button>
+            );
+          })}
+        </div>
+      </div>
+
       {/* BLOCK 2: Category Master Section (Creation, Checking, Modifying Categories) */}
       <div className="bg-white dark:bg-slate-850 p-4 rounded-2xl border border-slate-100 dark:border-slate-800 shadow-sm space-y-3.5">
         {/* Collapsible Section Header */}
