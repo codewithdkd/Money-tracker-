@@ -2,61 +2,73 @@
 @import "tailwindcss";
 
 :root {
-  --app-bg: #F5F1E8;             /* soft warm cream */
-  --app-secondary-bg: #EFE8DC;   /* darker secondary cream */
-  --app-card: #FCFAF6;           /* slightly lighter warm cozy card */
-  --app-card-elevated: #FFFFFF;  /* elevated pure white cards */
-  --app-primary: #5B3DF5;        /* premium royal purple accent */
-  --app-primary-hover: #4C2FE0;  /* deep purple hover */
-  --app-primary-light: #EEE9FF;  /* soft violet wrapper tint */
+  --app-bg: #F3EFE7;             /* light warm cream background */
+  --app-secondary-bg: #FCFAF6;   /* secondary warm surface */
+  --app-card: #FCFAF6;           /* pristine cards */
+  --app-card-elevated: #F8F4ED;  /* card elevated */
+  --app-primary: #4A6A5A;        /* sage green primary */
+  --app-primary-hover: #383A46;  /* primary dark */
+  --app-primary-light: #ECE6DD;  /* premium clean warm tint */
+  --app-accent: #B88A4A;         /* muted gold accent */
   
-  --app-success: #16A34A;
+  --app-success: #16A34A;        /* green for income */
   --app-success-light: #DCFCE7;
-  --app-warning: #F59E0B;
+  --app-warning: #D97706;        /* warning orange */
   --app-warning-light: #FEF3C7;
-  --app-error: #DC2626;
+  --app-error: #DC2626;          /* red for expenses */
   --app-error-light: #FEE2E2;
+  --app-transfer: #2563EB;       /* transfer blue button */
+  --app-transfer-light: #DBEAFE;
   
   --app-text-primary: #1F2937;
   --app-text-secondary: #6B7280;
   --app-text-muted: #9CA3AF;
-  --app-border: #E6DED1;         /* soft designer layout border */
-  --app-divider: #F0E9DD;        /* extremely thin divider */
+  --app-border: #E2DDD4;         /* subtle borders */
+  --app-divider: #ECE6DD;        /* delicate thin separator */
   
-  --input-bg: #FFFFFF;
-  --input-border: #E6DED1;
+  --input-bg: #FCFAF6;
+  --input-border: #E2DDD4;
   --input-text: #1F2937;
-  --tag-bg: #EFE8DC;
+  --tag-bg: #ECE6DD;
   --tag-text: #1F2937;
+
+  --app-card-shadow: 0 2px 8px rgba(80,60,40,0.05), 0 8px 24px rgba(80,60,40,0.03);
+  --app-card-gradient: linear-gradient(180deg, #FCFAF6 0%, #F8F4ED 100%);
 }
 
 .dark {
-  --app-bg: #0D0E15;             /* sleek obsidian midnight background */
-  --app-secondary-bg: #131420;   /* secondary deep block */
-  --app-card: #181926;           /* elegant dark visual card */
-  --app-card-elevated: #212335;  /* highlight elevated card / input */
-  --app-primary: #7C5CFF;        /* vibrant light neon purple for visibility */
-  --app-primary-hover: #6949F5;
-  --app-primary-light: #24203B;
+  --app-bg: #121A17;             /* sleek matte dark teal background */
+  --app-secondary-bg: #18211D;   /* secondary deep slate block */
+  --app-card: #1F2A25;           /* majestic muted dark teal card */
+  --app-card-elevated: #18211D;  /* elevated dashboard blocks */
+  --app-primary: #0F766E;        /* luxury sage dark teal */
+  --app-primary-hover: #0B5E59;  
+  --app-primary-light: #142C2A;
+  --app-accent: #C89A63;         /* tan gold dark accent */
   
   --app-success: #22C55E;
   --app-success-light: #122C1C;
-  --app-warning: #FBBF24;
+  --app-warning: #F59E0B;
   --app-warning-light: #342710;
-  --app-error: #EF4444;
-  --app-error-light: #351515;
+  --app-error: #F43F5E;
+  --app-error-light: #4A151C;
+  --app-transfer: #38BDF8;       /* bright transfer blue */
+  --app-transfer-light: #0C3A4E;
   
-  --app-text-primary: #F8FAFC;
-  --app-text-secondary: #CBD5E1;
-  --app-text-muted: #94A3B8;
-  --app-border: #23253A;         /* luxury dark slate divider border */
-  --app-divider: #1A1C2C;
+  --app-text-primary: #F5F5F4;
+  --app-text-secondary: #A8B0AA;
+  --app-text-muted: #717C76;
+  --app-border: #2F3A35;         /* subtle matte teal border */
+  --app-divider: #1F2925;
   
-  --input-bg: #181926;
-  --input-border: #23253A;
-  --input-text: #F8FAFC;
-  --tag-bg: #212335;
-  --tag-text: #F8FAFC;
+  --input-bg: #1F2A25;
+  --input-border: #2F3A35;
+  --input-text: #F5F5F4;
+  --tag-bg: #2F3A35;
+  --tag-text: #F5F5F4;
+
+  --app-card-shadow: 0 4px 16px rgba(0,0,0,0.25);
+  --app-card-gradient: linear-gradient(180deg, #1F2A25 0%, #18211D 100%);
 }
 
 @theme {
@@ -75,9 +87,9 @@
 @layer utilities {
   /* Dynamic Backgrounds & Premium Card Shadows instead of harsh borders */
   .bg-white, .bg-slate-800, .bg-slate-850 {
-    background-color: var(--app-card) !important;
-    box-shadow: 0 4px 20px -2px rgba(91, 61, 245, 0.05), 0 2px 8px -1px rgba(91, 61, 245, 0.03) !important;
-    border-color: var(--app-divider) !important;
+    background: var(--app-card-gradient) !important;
+    box-shadow: var(--app-card-shadow) !important;
+    border-color: var(--app-border) !important;
   }
   
   /* Slate environments translate fully to main backgrounds */
@@ -125,7 +137,7 @@
     border-color: var(--app-border) !important;
   }
   
-  /* Primary Royal Purple brand colors */
+  /* Primary brand colors mapped to Indigo utilities */
   .bg-indigo-600, .bg-indigo-650, .bg-[#4f46e5], .bg-[#5B4CFF], .bg-indigo-500 {
     background-color: var(--app-primary) !important;
     color: #FFFFFF !important;
@@ -181,24 +193,36 @@
   .border-rose-505\/20, .border-rose-250, .border-rose-905\/40, .border-red-500, .border-red-200 {
     border-color: var(--app-error) !important;
   }
+
+  /* Transfer configurations */
+  .text-blue-500, .text-blue-600, .text-blue-400, .text-slate-400 {
+    color: var(--app-transfer) !important;
+  }
+  .bg-blue-500, .bg-blue-600 {
+    background-color: var(--app-transfer) !important;
+    color: #FFFFFF !important;
+  }
+  .bg-blue-50 {
+    background-color: var(--app-transfer-light) !important;
+  }
   
-  /* Bottom navigation tab elements: inactive #94A3B8, active #5B3DF5 */
+  /* Bottom navigation tab elements: inactive, active */
   .h-16 .text-slate-400 {
-    color: #94A3B8 !important;
+    color: var(--app-text-secondary) !important;
   }
   .h-16 .text-indigo-600, .h-16 .text-indigo-400 {
     color: var(--app-primary) !important;
   }
   
-  /* Interactive Keypad buttons for PIN screens (White back, soft shadows, dark texts) */
+  /* Interactive Keypad buttons for PIN screens */
   .grid-cols-3 button.h-14.w-14 {
-    background-color: #FFFFFF !important;
-    color: #1F2937 !important;
-    box-shadow: 0 4px 14px rgba(91, 61, 245, 0.08) !important;
-    border: 1px solid #E6DED1 !important;
+    background-color: var(--app-card-elevated) !important;
+    color: var(--app-text-primary) !important;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05) !important;
+    border: 1px solid var(--app-border) !important;
   }
   
-  /* Keep verify action button pristine purple */
+  /* Keep verify action button pristine primary */
   .grid-cols-3 button.h-14.w-14.bg-indigo-600, 
   .grid-cols-3 button.h-14.w-14.bg-[#4f46e5] {
     background-color: var(--app-primary) !important;
@@ -227,17 +251,17 @@
   background: var(--app-primary);
 }
 
-/* Custom premium visual glow and premium gradients styling */
+/* Custom premium visual glow and premium gradients styling (Glow effects removed) */
 .glow-primary {
-  box-shadow: 0 0 20px rgba(91, 61, 245, 0.25);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05) !important;
 }
 
 .glow-primary:hover {
-  box-shadow: 0 0 25px rgba(91, 61, 245, 0.45);
+  box-shadow: 0 2px 5px rgba(0, 0, 0, 0.08) !important;
 }
 
 .gradient-premium-purple {
-  background: linear-gradient(135deg, var(--app-primary) 0%, var(--app-primary) 100%);
+  background: linear-gradient(135deg, var(--app-primary) 0%, var(--app-primary) 100%) !important;
 }
 
 /* Premium Custom Range Sliders mapped dynamically */
@@ -245,10 +269,17 @@ input[type="range"] {
   -webkit-appearance: none;
   appearance: none;
   width: 100%;
-  height: 7px;
+  height: 16px; /* Allow enough height for native hit-box and thumb alignment */
+  background: transparent !important;
+  outline: none;
+}
+
+input[type="range"]::-webkit-slider-runnable-track {
+  width: 100%;
+  height: 6px;
   background: var(--app-border) !important;
   border-radius: 99px;
-  outline: none;
+  border: none;
 }
 
 input[type="range"]::-webkit-slider-thumb {
@@ -257,28 +288,37 @@ input[type="range"]::-webkit-slider-thumb {
   width: 16px;
   height: 16px;
   border-radius: 50%;
-  background: var(--app-primary);
+  background: var(--app-primary) !important;
   cursor: pointer;
-  border: 1.5px solid var(--app-card);
-  box-shadow: 0 0 6px var(--app-primary);
+  border: 2px solid var(--app-card) !important;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.25) !important;
+  margin-top: -5px; /* Centering the 16px thumb inside the 6px track */
   transition: transform 0.15s ease-in-out, background-color 0.15s;
 }
 
 input[type="range"]::-webkit-slider-thumb:hover {
-  transform: scale(1.25);
+  transform: scale(1.15);
+}
+
+input[type="range"]::-moz-range-track {
+  width: 100%;
+  height: 6px;
+  background: var(--app-border) !important;
+  border-radius: 99px;
+  border: none;
 }
 
 input[type="range"]::-moz-range-thumb {
   width: 16px;
   height: 16px;
-  border: 1.5px solid var(--app-card);
+  border: 2px solid var(--app-card) !important;
   border-radius: 50%;
-  background: var(--app-primary);
+  background: var(--app-primary) !important;
   cursor: pointer;
-  box-shadow: 0 0 6px var(--app-primary);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.25) !important;
   transition: transform 0.15s ease-in-out, background-color 0.15s;
 }
 
 input[type="range"]::-moz-range-thumb:hover {
-  transform: scale(1.25);
+  transform: scale(1.15);
 }

@@ -353,17 +353,17 @@ export default function PhoneFrame({
   return (
     <div className="relative p-2 sm:p-4 flex items-center justify-center bg-transparent w-full">
       {/* Luxurious Physical Phone Hardware Case */}
-      <div className="w-[395px] max-w-[calc(100vw-16px)] h-[810px] max-h-[calc(100vh-16px)] sm:max-h-[810px] bg-slate-950 dark:bg-slate-950 rounded-[48px] p-3 shadow-[0_25px_60px_-15px_rgba(91,61,245,0.3)] border-4 border-[#5B3DF5] dark:border-[#7C5CFF] flex flex-col justify-between overflow-hidden relative group/frame transition-all duration-300 ring-4 ring-slate-900/40 dark:ring-slate-900/80">
+      <div className="w-[395px] max-w-[calc(100vw-16px)] h-[810px] max-h-[calc(100vh-16px)] sm:max-h-[810px] bg-[#383A46] dark:bg-[#090D0B] rounded-[48px] p-3 shadow-[0_20px_50px_rgba(80,60,40,0.06)] dark:shadow-[0_25px_60px_rgba(0,0,0,0.6)] border-4 border-[#4A6A5A] dark:border-[#0F766E] flex flex-col justify-between overflow-hidden relative group/frame transition-all duration-300 ring-4 ring-slate-900/10 dark:ring-slate-950/80">
         
         {/* Sleek Side Hardware Buttons (Power/Volume) */}
-        <div className="absolute top-28 -right-0.5 w-[3px] h-10 bg-[#5B3DF5] rounded-l-md" />
+        <div className="absolute top-28 -right-0.5 w-[3px] h-10 bg-[#B88A4A] dark:bg-[#C89A63] rounded-l-md" />
         <div className="absolute top-44 -right-0.5 w-[3px] h-14 bg-slate-800 rounded-l-md" />
         <div className="absolute top-64 -right-0.5 w-[3px] h-14 bg-slate-800 rounded-l-md" />
 
         {/* Dynamic Premium Dynamic Island / Notch layout */}
         <div className="absolute top-5 left-1/2 -translate-x-1/2 h-5 w-24 bg-black rounded-full z-45 flex items-center justify-center gap-2 border border-slate-800 shadow-inner">
           <div className="h-2 w-2 rounded-full bg-[#121620] border border-slate-800 flex items-center justify-center">
-            <div className="h-1 w-1 rounded-full bg-indigo-500/80" />
+            <div className="h-1 w-1 rounded-full bg-[#B88A4A] dark:bg-[#C89A63]" />
           </div>
           <div className="h-1 w-10 bg-slate-900 rounded-full" />
         </div>
@@ -395,12 +395,12 @@ export default function PhoneFrame({
         </AnimatePresence>
 
         {/* Screen layout container */}
-        <div className={`flex-1 flex flex-col overflow-hidden rounded-[34px] border border-slate-900 ${settings.darkMode ? 'dark bg-slate-900' : 'bg-slate-50'} transition-colors duration-300 relative`}>
+        <div className={`flex-1 flex flex-col overflow-hidden rounded-[34px] border border-[#4A6A5A] dark:border-[#2F3A35] bg-[var(--app-bg)] transition-colors duration-300 relative`}>
             
-            {/* Top Status Indicators bar */}
-          <div className="h-11 px-6 bg-slate-100 dark:bg-slate-900 flex items-center justify-between z-40 text-slate-500 dark:text-slate-400 select-none border-b border-slate-100 dark:border-slate-850">
+            {/* Top Status Indicators bar - Elegant Sage/Muted Gold header (Light) & Sophisticated Dark Teal (Dark) */}
+          <div className="h-11 px-6 bg-[#4A6A5A] dark:bg-[#1F2A25] flex items-center justify-between z-40 text-stone-100 dark:text-stone-300 select-none border-b border-[#B88A4A] dark:border-[#2F3A35]">
             <div className="flex items-center gap-1 text-[11px] font-black font-mono">
-              <Calendar className="h-3 w-3 text-indigo-500" />
+              <Calendar className="h-3 w-3 text-[#B88A4A] dark:text-[#C89A63]" />
               <span>{`${new Date().getDate()} - ${new Date().toLocaleDateString('en-US', { month: 'short' }).toUpperCase()}`}</span>
             </div>
             
@@ -409,13 +409,13 @@ export default function PhoneFrame({
                 setTempProfileName(settings.userName || 'User');
                 setShowNameModal(true);
               }}
-              className="flex items-center gap-1.5 bg-indigo-50 dark:bg-slate-800 hover:bg-indigo-100 dark:hover:bg-slate-700 px-2.5 py-0.5 rounded-full text-[10px] font-bold text-indigo-600 dark:text-indigo-400 border border-indigo-150/40 dark:border-slate-700 cursor-pointer transition-all"
+              className="flex items-center gap-1.5 bg-[#383A46] dark:bg-slate-900 hover:bg-[#4A6A5A] dark:hover:bg-slate-800 px-2.5 py-0.5 rounded-full text-[10px] font-bold text-slate-100 dark:text-slate-200 border border-[#B88A4A]/40 dark:border-slate-800 cursor-pointer transition-all"
               title="Edit Profile Name"
             >
-              <div className="h-3.5 w-3.5 rounded-full bg-indigo-600 text-[8px] text-white font-black flex items-center justify-center">
+              <div className="h-3.5 w-3.5 rounded-full bg-[#B88A4A] dark:bg-[#C89A63] text-[8px] text-white dark:text-stone-900 font-black flex items-center justify-center">
                 {(settings.userName || 'User').charAt(0).toUpperCase()}
               </div>
-              <span className="truncate max-w-[65px]">{settings.userName || 'User'}</span>
+              <span className="truncate max-w-[65px] font-mono">{settings.userName || 'User'}</span>
             </button>
           </div>
 

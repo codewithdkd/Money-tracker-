@@ -104,7 +104,7 @@ export default function App() {
   }, [settings.themePreference, settings.darkMode]);
 
   return (
-    <div className="min-h-screen w-screen bg-[#EFE8DC] dark:bg-[#131420] flex flex-col justify-center items-center p-2 overflow-y-auto select-none">
+    <div className="min-h-screen w-screen bg-[#F3EFE7] dark:bg-[#121A17] flex flex-col justify-center items-center p-2 overflow-y-auto select-none">
       <PhoneFrame
         onAddCategory={handleAddCategory}
         expenses={expenses}

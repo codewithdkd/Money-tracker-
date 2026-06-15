@@ -96,9 +96,12 @@ export default function SettingsScreen({
   );
   const [wipeConfirm, setWipeConfirm] = useState<boolean>(false);
 
-  // 3. Overall Budget alert threshold
+  // 3. Category & Overall Budget alert thresholds
   const [alertThreshold, setAlertThreshold] = useState<number>(
     settings.alertThresholdPercentage || 80,
+  );
+  const [overallThreshold, setOverallThreshold] = useState<number>(
+    settings.overallThresholdPercentage || 80,
   );
 
   // 4. PIN Change Lock security states
@@ -332,6 +335,17 @@ export default function SettingsScreen({
     onUpdateSettings({
       ...settings,
       alertThresholdPercentage: val,
+    });
+  };
+
+  // Overall Total Budget alarm warning threshold percentage
+  const handleSaveOverallThreshold = (valStr: string) => {
+    const val = parseInt(valStr);
+    if (isNaN(val) || val <= 0 || val > 100) return;
+    setOverallThreshold(val);
+    onUpdateSettings({
+      ...settings,
+      overallThresholdPercentage: val,
     });
   };
 
@@ -753,23 +767,28 @@ export default function SettingsScreen({
       </div>
 
       {/* BLOCK 1: OVERALL TOTAL BUDGET WARNING LIMIT */}
-      <div className="bg-white dark:bg-slate-850 p-3.5 rounded-2xl border border-slate-100 dark:border-slate-800 shadow-sm space-y-2">
-        <h3 className="text-[10px] font-black uppercase text-slate-400 dark:text-slate-400 tracking-wider font-mono">
-          OVERALL TOTAL BUDGET WARNING LIMIT
-        </h3>
-        <div className="flex items-center gap-3">
-          <input
-            type="range"
-            min={40}
-            max={100}
-            step={5}
-            value={alertThreshold}
-            onChange={(e) => handleSaveThreshold(e.target.value)}
-            className="flex-1 accent-[#5B4CFF] cursor-pointer h-1.5 bg-slate-200 dark:bg-slate-800 rounded-lg"
-          />
-          <span className="bg-indigo-50 dark:bg-indigo-950/40 text-[#4f46e5] dark:text-indigo-300 font-extrabold font-mono text-[10px] px-2.5 py-1 rounded-full border border-indigo-100 dark:border-indigo-900/40 min-w-[45px] text-center">
-            {alertThreshold}%
-          </span>
+      <div className="bg-white dark:bg-slate-850 p-3.5 rounded-2xl border border-slate-100 dark:border-slate-800 shadow-sm space-y-3">
+        <div className="space-y-1">
+          <h3 className="text-[10px] font-black uppercase text-slate-400 dark:text-slate-400 tracking-wider font-mono">
+            OVERALL EXPENSE BUDGET WARNING LIMIT
+          </h3>
+          <p className="text-[9px] text-slate-400 dark:text-slate-500 leading-normal">
+            Triggers warning on home dashboard budget monitor once combined monthly usage exceeds this ratio.
+          </p>
+          <div className="flex items-center gap-3 pt-1">
+            <input
+              type="range"
+              min={40}
+              max={100}
+              step={5}
+              value={overallThreshold}
+              onChange={(e) => handleSaveOverallThreshold(e.target.value)}
+              className="flex-1 cursor-pointer"
+            />
+            <span className="bg-indigo-50 dark:bg-indigo-950/40 text-[#4f46e5] dark:text-indigo-300 font-extrabold font-mono text-[10px] px-2.5 py-1 rounded-full border border-indigo-100 dark:border-indigo-900/40 min-w-[45px] text-center">
+              {overallThreshold}%
+            </span>
+          </div>
         </div>
       </div>
 
